@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Twitch 小奇點 &amp; 贈訂 資訊擷取器</title>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+<style>
+  :root {
+    --color-primary-dark: #00314F;
+    --color-primary-mid: #3E6B8E;
+    --color-primary-light: #FCE4A8;
+    --color-text-light: #FCE4A8;
+    --color-background-header: #00314F;
+    --color-shadow-dark: rgba(0, 19, 79, 0.7);
+    --spacing-sm: 12px;
+    --spacing-md: 24px;
+    --border-radius-lg: 12px;
+    --table-header-bg: #00314F;
+    --table-row-bg: #3E6B8E;
+    --table-row-hover-bg: #274a71;
+    --sidebar-bg: #00314F;
+    --sidebar-item-bg: #00314F;
+    --sidebar-item-hover-bg: #FCE4A8;
+    --sidebar-item-hover-color: #00314F;
+  }
+
+  /* Reset & base */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0; 
+    font-family: 'Inter', 'Noto Sans TC', sans-serif;
+    background: var(--color-primary-dark);
+    color: var(--color-text-light);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  a {
+    color: inherit; 
+    text-decoration: none;
+  }
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-primary-dark);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-primary-mid);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--table-row-hover-bg);
+  }
+  /* Header */
+  header {
+    position: sticky;
+    top: 0;
+    height: 64px;
+    background: var(--color-background-header);
+    box-shadow: 0 2px var(--spacing-sm) var(--color-shadow-dark);
+    display: flex;
+    align-items: center;
+    padding: 0 var(--spacing-md);
+    z-index: 101;
+    gap: var(--spacing-sm);
+  }
+  header .menu-button {
+    background: transparent;
+    border: none;
+    color: var(--color-primary-light);
+    cursor: pointer;
+    font-size: 28px;
+    padding: 6px 8px 6px 0;
+    border-radius: var(--border-radius-lg);
+    transition: background-color 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+  header .menu-button:hover,
+  header .menu-button:focus {
+    background: rgba(252, 228, 168, 0.15);
+    outline: none;
+  }
+  header .menu-button .material-icons {
+    font-size: 28px;
+  }
+  header .brand {
+    font-weight: 900;
+    font-size: clamp(1.25rem, 1.5vw, 1.75rem);
+    letter-spacing: 0.08em;
+    color: var(--color-primary-light);
+    user-select: none;
+  }
+
+  #app {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: calc(100vh - 64px);
+    overflow: hidden;
+  }
+  /* Sidebar: Set entire sidebar background color to #00314F */
+  nav.sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: var(--sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    padding-top: 20px;
+    color: var(--color-primary-light);
+    transition: transform 0.3s ease;
+    border-right: 1px solid var(--color-primary-light);
+    z-index: 200;
+  }
+  nav.sidebar h2 {
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 32px;
+    letter-spacing: 0.08em;
+    user-select: none;
+    color: var(--color-primary-light);
+  }
+  nav.sidebar ul {
+    list-style: none;
+    padding: 0 12px;
+    margin: 0;
+    flex: 1;
+    overflow-y: auto;
+    background: var(--sidebar-item-bg);
+  }
+  nav.sidebar ul li {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    border-radius: var(--border-radius-lg);
+    cursor: pointer;
+    gap: 16px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--color-primary-light);
+    user-select: none;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    background: var(--sidebar-item-bg);
+  }
+  nav.sidebar ul li:hover,
+  nav.sidebar ul li.active {
+    background: var(--sidebar-item-hover-bg);
+    color: var(--sidebar-item-hover-color);
+  }
+  nav.sidebar ul li .material-icons {
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  nav.sidebar ul li .badge {
+    display: none;
+  }
+  /* Mobile Sidebar Hidden */
+  nav.sidebar.mobile-hidden {
+    transform: translateX(-100%);
+    position: fixed;
+    top: 64px;
+    bottom: 0;
+    left: 0;
+    width: 280px;
+    box-shadow: 4px 0 12px var(--color-shadow-dark);
+  }
+
+  main.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: var(--spacing-md);
+    overflow-y: auto;
+  }
+  #subTitle {
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: var(--color-primary-light);
+    margin-bottom: var(--spacing-md);
+    user-select: none;
+    transition: color 0.3s ease;
+  }
+  main.content .input-group {
+    max-width: 480px;
+    margin-bottom: var(--spacing-md);
+  }
+  main.content label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: var(--color-primary-light);
+  }
+  main.content input[type="text"] {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: var(--border-radius-lg);
+    border: none;
+    font-size: 1rem;
+    background: var(--color-primary-dark);
+    color: var(--color-primary-light);
+    transition: background-color 0.3s ease;
+  }
+  main.content input[type="text"]:focus {
+    background: var(--color-primary-mid);
+    outline: none;
+  }
+  main.content button.connect-btn,
+  main.content button.export-btn {
+    margin-top: 12px;
+    background: var(--color-primary-dark);
+    border: 2px solid var(--color-primary-light);
+    color: var(--color-primary-light);
+    font-weight: 700;
+    cursor: pointer;
+    padding: 12px 28px;
+    font-size: 1rem;
+    border-radius: 14px;
+    box-shadow: 0 0 5px var(--color-primary-light);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    user-select: none;
+  }
+  main.content button.connect-btn:hover:enabled,
+  main.content button.export-btn:hover:enabled {
+    background: var(--color-primary-light);
+    color: var(--color-primary-dark);
+    box-shadow: 0 0 15px var(--color-primary-light);
+  }
+  main.content button.connect-btn:disabled,
+  main.content button.export-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .btn-group {
+    margin-bottom: 16px;
+    display: flex;
+    gap: 16px;
+  }
+  table.event-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 12px;
+    font-size: 0.95rem;
+    color: var(--color-primary-light);
+  }
+  table.event-table thead th {
+    text-align: left;
+    font-weight: 700;
+    padding: 12px 16px;
+    background: var(--table-header-bg);
+    user-select: none;
+  }
+  table.event-table tbody tr {
+    background: var(--table-row-bg);
+    border-radius: var(--border-radius-lg);
+    transition: background-color 0.3s ease;
+  }
+  table.event-table tbody tr:hover {
+    background: var(--table-row-hover-bg);
+  }
+  table.event-table tbody td {
+    padding: 12px 16px;
+    border-top: 1px solid transparent;
+    vertical-align: middle;
+  }
+  table.event-table tbody td > .user-name {
+    font-weight: 600;
+    max-width: 380px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  table.event-table tbody td .material-icons {
+    vertical-align: middle;
+    font-size: 20px;
+    margin-right: 4px;
+    color: var(--color-primary-light);
+  }
+  .table-wrapper {
+    overflow-x: auto;
+    padding-bottom: 12px;
+  }
+  #toast-container {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    max-width: 320px;
+    z-index: 9999;
+  }
+  .toast {
+    background: var(--color-primary-dark);
+    padding: 14px 20px;
+    border-radius: var(--border-radius-lg);
+    margin-top: 10px;
+    color: var(--color-primary-light);
+    box-shadow: 0 4px 20px rgba(62, 107, 142, 0.7);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    opacity: 0;
+    transform: translateX(100%);
+    animation: slideInToast 0.3s forwards;
+    font-weight: 600;
+  }
+  .toast-icon {
+    font-size: 24px;
+    color: var(--color-primary-light);
+    flex-shrink: 0;
+  }
+  @keyframes slideInToast {
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  footer {
+    background: var(--color-primary-dark);
+    color: var(--color-primary-light);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 12px 16px;
+    user-select: none;
+  }
+  @media (max-width: 1023px) {
+    nav.sidebar {
+      position: fixed;
+      top: 64px;
+      left: 0;
+      bottom: 0;
+      transform: translateX(-100%);
+      width: 280px;
+      z-index: 20;
+      box-shadow: 4px 0 12px rgba(0, 19, 79, 0.7);
+    }
+    nav.sidebar.mobile-visible {
+      transform: translateX(0);
+      transition: transform 0.3s ease;
+    }
+    #app {
+      padding-left: 0;
+    }
+  }
+  @media (max-width: 639px) {
+    header {
+      padding: 0 16px;
+    }
+    main.content {
+      padding: 16px 20px;
+    }
+    table.event-table {
+      font-size: 0.8rem;
+    }
+    table.event-table thead th,
+    table.event-table tbody td {
+      padding: 8px 10px;
+    }
+    nav.sidebar ul li {
+      padding: 9px 12px;
+      font-size: 0.9rem;
+    }
+  }
+</style>
+</head>
+<body>
+<header role="banner" aria-label="主選單區">
+  <button id="menu-toggle" class="menu-button" aria-label="切換選單" title="切換選單" aria-expanded="false" aria-controls="sidebar">
+    <span class="material-icons">menu</span>
+  </button>
+  <div class="brand" tabindex="0" id="mainTitle">Twitch Bits 與 贈訂擷取</div>
+</header>
+<div id="app">
+  <nav class="sidebar" id="sidebar" aria-label="主要導航">
+    <h2 tabindex="0">事件分類</h2>
+    <ul>
+      <li class="active" data-type="all" tabindex="0" role="button" aria-pressed="true" aria-label="顯示全部事件">
+        全部事件
+      </li>
+      <li data-type="bits" tabindex="0" role="button" aria-pressed="false" aria-label="顯示小奇點">
+        小奇點 (Bits)
+      </li>
+      <li data-type="gift" tabindex="0" role="button" aria-pressed="false" aria-label="顯示贈送訂閱">
+        贈送訂閱
+      </li>
+    </ul>
+  </nav>
+  <main class="content" role="main">
+    <p id="subTitle" aria-live="polite" aria-atomic="true" style="margin-top:0; margin-bottom:24px;">全部事件</p>
+    <section aria-label="頻道設定區" class="input-group">
+      <label for="channelName">輸入要觀察的 Twitch 頻道ID：</label>
+      <input type="text" id="channelName" placeholder="例如：ninja" aria-describedby="channelHelp" autocomplete="off" />
+      <button class="connect-btn" id="connectBtn" disabled>連線 Twitch IRC</button>
+      <small id="channelHelp">輸入正確的頻道ID以擷取聊天室事件。</small>
+    </section>
+    <section aria-label="匯出功能" class="btn-group" style="user-select:none;">
+      <button class="export-btn" id="exportCsvBtn" aria-label="下載 CSV 檔案">下載 CSV 檔案</button>
+    </section>
+    <section aria-label="事件列表" class="table-wrapper" tabindex="0">
+      <table class="event-table" role="grid" aria-live="polite" aria-relevant="all">
+        <thead>
+          <tr>
+            <th scope="col" style="width: 160px;">時間</th>
+            <th scope="col" style="width: 380px;">名稱</th>
+            <th scope="col" style="width: 300px;">類型</th>
+            <th scope="col" style="width: 160px;">數量</th>
+          </tr>
+        </thead>
+        <tbody id="eventTableBody">
+          <!-- 動態項目 -->
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>
+<div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
+<footer role="contentinfo">
+  © 2024 Twitch 小奇點與 贈訂擷取器 | 開發者: BLACKBOXAI 版權所有
+</footer>
+<script>
+(() => {
+  'use strict';
+
+  function formatDateTime(date) {
+    return date.toLocaleString(undefined, {
+      hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  }
+
+  class ToastManager {
+    constructor(container) {
+      this.container = container;
+      this.toasts = [];
+    }
+    show(message, icon = 'info', duration = 4000) {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.setAttribute('role', 'alert');
+      toast.setAttribute('aria-live', 'assertive');
+      toast.setAttribute('aria-atomic', 'true');
+      toast.innerHTML = `<span class="material-icons toast-icon">${icon}</span>${message}`;
+      this.container.appendChild(toast);
+      this.toasts.push(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+          if (this.container.contains(toast)) {
+            this.container.removeChild(toast);
+          }
+          this.toasts = this.toasts.filter(t => t !== toast);
+        }, 300);
+      }, duration);
+    }
+  }
+
+  const state = {
+    socket: null,
+    connected: false,
+    events: [],
+    filterType: 'all',
+    channel: '',
+    userToken: '',
+    bitsCount: 0,
+    giftCount: 0,
+  };
+
+  const ui = {
+    channelInput: document.getElementById('channelName'),
+    connectBtn: document.getElementById('connectBtn'),
+    eventTableBody: document.getElementById('eventTableBody'),
+    sidebar: document.getElementById('sidebar'),
+    menuToggle: document.getElementById('menu-toggle'),
+    badges: {
+      all: document.getElementById('badge-all'),
+      bits: document.getElementById('badge-bits'),
+      gift: document.getElementById('badge-gift')
+    },
+    exportCsvBtn: document.getElementById('exportCsvBtn'),
+    subTitle: document.getElementById('subTitle'),
+  };
+
+  const toastMgr = new ToastManager(document.getElementById('toast-container'));
+
+  function validateChannelName(name) {
+    if (typeof name !== 'string') return false;
+    return /^[a-z0-9_]{4,25}$/.test(name.trim().toLowerCase());
+  }
+
+  ui.channelInput.addEventListener('input', () => {
+    const val = ui.channelInput.value.trim().toLowerCase();
+    ui.connectBtn.disabled = !validateChannelName(val);
+  });
+
+  class TwitchIRC {
+    constructor(channel, token = '') {
+      this.channel = channel.toLowerCase();
+      this.token = token;
+      this.websocket = null;
+      this.listeners = {};
+      this.reconnectInterval = 5000;
+      this.connected = false;
+      this.nick = token ? this.getUserFromToken(token) : 'justinfan' + Math.floor(Math.random()*80000);
+      this._reconnectTimer = null;
+    }
+    getUserFromToken(token) {
+      return 'justinfan' + Math.floor(Math.random()*80000);
+    }
+    connect() {
+      if (this.connected) return;
+      const wsUrl = 'wss://irc-ws.chat.twitch.tv:443';
+      this.websocket = new WebSocket(wsUrl);
+      this.websocket.addEventListener('open', () => this.onOpen());
+      this.websocket.addEventListener('message', e => this.onMessage(e));
+      this.websocket.addEventListener('close', e => this.onClose(e));
+      this.websocket.addEventListener('error', e => this.onError(e));
+    }
+    disconnect() {
+      if (!this.connected) return;
+      this.websocket.close(1000, 'Client disconnect');
+      this.connected = false;
+    }
+    onOpen() {
+      this.connected = true;
+      const nick = this.nick;
+      this.sendRaw(`PASS ${this.token || 'SCHMOOPIIE'}`);
+      this.sendRaw(`NICK ${nick}`);
+      this.sendRaw('CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership');
+      this.sendRaw(`JOIN #${this.channel}`);
+      this.emit('open');
+    }
+    onMessage(event) {
+      const msg = event.data;
+      if (msg.startsWith('PING')) {
+        this.sendRaw('PONG :tmi.twitch.tv');
+        return;
+      }
+      const parsed = this.parseIRCMessage(msg);
+      if (parsed) {
+        this.emit('message', parsed);
+      }
+    }
+    onClose(event) {
+      this.connected = false;
+      this.emit('close', event);
+      if (!event.wasClean) {
+        if (!this._reconnectTimer) {
+          this._reconnectTimer = setTimeout(() => {
+            this._reconnectTimer = null;
+            this.connect();
+          }, this.reconnectInterval);
+        }
+      }
+    }
+    onError(event) {
+      this.emit('error', event);
+    }
+    sendRaw(cmd) {
+      if (this.connected && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        this.websocket.send(cmd + '\r\n');
+      }
+    }
+    parseIRCMessage(raw) {
+      const message = {
+        raw,
+        tags: {},
+        prefix: '',
+        command: '',
+        params: [],
+        trailing: '',
+      };
+      let rest = raw;
+      if (rest.startsWith('@')) {
+        const endTags = rest.indexOf(' ');
+        if (endTags === -1) return null;
+        const tagsStr = rest.slice(1, endTags);
+        rest = rest.slice(endTags + 1);
+        tagsStr.split(';').forEach(tagPair => {
+          const [key, ...vals] = tagPair.split('=');
+          message.tags[key] = vals.join('=') || '';
+        });
+      }
+      if (rest.startsWith(':')) {
+        const endPrefix = rest.indexOf(' ');
+        message.prefix = rest.slice(1, endPrefix);
+        rest = rest.slice(endPrefix + 1);
+      }
+      const firstSpace = rest.indexOf(' ');
+      if (firstSpace === -1) {
+        message.command = rest;
+      } else {
+        message.command = rest.slice(0, firstSpace);
+        rest = rest.slice(firstSpace + 1);
+        const split = [];
+        let current = '';
+        let trailingStarted = false;
+        for(let i=0; i<rest.length; i++) {
+          if (!trailingStarted) {
+            if (rest[i] === ' ') {
+              if (current.length > 0) {
+                split.push(current);
+                current = '';
+              }
+            } else if (rest[i] === ':' && split.length > 0) {
+              trailingStarted = true;
+              current = rest.slice(i+1);
+              break;
+            } else {
+              current += rest[i];
+            }
+          }
+        }
+        if (current.length > 0) split.push(current);
+        message.params = split;
+        if (trailingStarted) {
+          message.trailing = current;
+        }
+      }
+      return message;
+    }
+    on(event, cb) {
+      if (!this.listeners[event]) {
+        this.listeners[event] = [];
+      }
+      this.listeners[event].push(cb);
+    }
+    off(event, cb) {
+      if (!this.listeners[event]) return;
+      this.listeners[event] = this.listeners[event].filter(fn => fn !== cb);
+    }
+    emit(event, data) {
+      if (this.listeners[event]) {
+        this.listeners[event].forEach(cb => cb(data));
+      }
+    }
+  }
+  function parseTwitchEvent(msg) {
+    const tags = msg.tags;
+    const command = msg.command;
+    const trailing = msg.trailing;
+    let event = null;
+    const timestamp = new Date();
+    const username = tags['login'] || '';
+    const displayName = tags['display-name'] || username;
+    const combinedName = username && displayName ? `${username}#${displayName}` : username || displayName || '';
+    if (command === 'PRIVMSG' && tags.bits && tags.bits !== '0') {
+      const bitsAmount = parseInt(tags.bits, 10);
+      const messageText = trailing || '';
+      event = {
+        timestamp,
+        username,
+        displayName,
+        combinedName,
+        type: 'bits',
+        amount: bitsAmount,
+        message: messageText,
+        rawTags: tags,
+      };
+    } else if (command === 'NOTICE' && tags['msg-id'] === 'subgift') {
+      const gifterUsername = tags['login'] || '';
+      const gifterDisplayName = tags['display-name'] || gifterUsername;
+      const recipientName = tags['msg-param-recipient-display-name'] || '';
+      const tier = tags['msg-param-sub-plan'] || '';
+      const tierMap = {'1000':'Tier 1','2000':'Tier 2','3000':'Tier 3'};
+      const tierName = tierMap[tier] || tier;
+      const combinedNameGift = gifterUsername && gifterDisplayName ? `${gifterUsername}#${gifterDisplayName}` : gifterUsername || gifterDisplayName || '';
+      event = {
+        timestamp,
+        username: gifterUsername,
+        displayName: gifterDisplayName,
+        combinedName: combinedNameGift,
+        type: 'gift',
+        amount: 1,
+        recipientName,
+        tier: tierName,
+        message: trailing || '',
+        rawTags: tags,
+      };
+    } else if (command === 'NOTICE' && (tags['msg-id'] === 'submysterygift' || tags['msg-id'] === 'subgift')) {
+      const gifterUsername = tags['login'] || '';
+      const gifterDisplayName = tags['display-name'] || gifterUsername;
+      const tier = tags['msg-param-sub-plan'] || '';
+      const tierMap = {'1000':'Tier 1','2000':'Tier 2','3000':'Tier 3'};
+      const tierName = tierMap[tier] || tier;
+      let count = 1;
+      if (tags['msg-param-mass-gift-count']) {
+        count = parseInt(tags['msg-param-mass-gift-count'], 10);
+      }
+      const combinedNameMassGift = gifterUsername && gifterDisplayName ? `${gifterUsername}#${gifterDisplayName}` : gifterUsername || gifterDisplayName || '';
+      event = {
+        timestamp,
+        username: gifterUsername,
+        displayName: gifterDisplayName,
+        combinedName: combinedNameMassGift,
+        type: 'gift',
+        amount: count,
+        recipientName: '',
+        tier: tierName,
+        message: trailing || '',
+        rawTags: tags,
+      };
+    }
+    return event;
+  }
+  function renderEvent(event) {
+    if (!event) return;
+    state.events.unshift(event);
+    if (state.events.length > 200) {
+      state.events.pop();
+    }
+    updateBadges();
+    renderTable(state.filterType);
+    if (!document.hidden) {
+      toastMgr.show(renderToastMessage(event), event.type === 'bits' ? 'local_play' : 'card_giftcard');
+    }
+  }
+  function updateBadges() {
+    const allCount = state.events.length;
+    const bitsCount = state.events.filter(e => e.type === 'bits').length;
+    const giftCount = state.events.filter(e => e.type === 'gift').length;
+    state.bitsCount = bitsCount;
+    state.giftCount = giftCount;
+    ui.badges.all.textContent = allCount;
+    ui.badges.bits.textContent = bitsCount;
+    ui.badges.gift.textContent = giftCount;
+  }
+  function renderTable(filter = 'all') {
+    ui.eventTableBody.innerHTML = '';
+    const filtered = state.events.filter(e => filter === 'all' || e.type === filter);
+    for (const ev of filtered) {
+      const tr = document.createElement('tr');
+      const timeTd = document.createElement('td');
+      timeTd.textContent = formatDateTime(ev.timestamp);
+      timeTd.title = ev.timestamp.toISOString();
+      const nameTd = document.createElement('td');
+      nameTd.textContent = ev.combinedName;
+      nameTd.className = 'user-name';
+      const typeTd = document.createElement('td');
+      if (ev.type === 'bits') {
+        typeTd.innerHTML = '<span class="material-icons" aria-hidden="true">local_play</span>小奇點 Cheer';
+      } else if (ev.type === 'gift') {
+        typeTd.innerHTML = '<span class="material-icons" aria-hidden="true">card_giftcard</span>贈送訂閱';
+      } else {
+        typeTd.textContent = ev.type;
+      }
+      const amtTd = document.createElement('td');
+      amtTd.textContent = ev.amount.toString();
+      tr.append(timeTd, nameTd, typeTd, amtTd);
+      ui.eventTableBody.appendChild(tr);
+    }
+  }
+  function renderToastMessage(ev) {
+    if (!ev) return '';
+    if (ev.type === 'bits') {
+      return `觀眾 ${ev.combinedName} 贊助了 ${ev.amount} 小奇點！`;
+    } else if (ev.type === 'gift') {
+      if (ev.amount > 1) {
+        return `觀眾 ${ev.combinedName} 贈送了 ${ev.amount} 個訂閱 (${ev.tier})！`;
+      } else {
+        return `觀眾 ${ev.combinedName} 贈送了一個訂閱 (${ev.tier}) 給 ${ev.recipientName || '未知'}！`;
+      }
+    }
+    return '';
+  }
+  ui.connectBtn.addEventListener('click', () => {
+    if (state.connected) {
+      disconnectIRC();
+    } else {
+      const channel = ui.channelInput.value.trim().toLowerCase();
+      if (!validateChannelName(channel)) {
+        toastMgr.show('頻道名稱格式錯誤，請輸入有效的頻道名稱。', 'error', 6000);
+        return;
+      }
+      connectIRC(channel);
+    }
+  });
+  function connectIRC(channel) {
+    if (state.connected) return;
+    state.channel = channel;
+    state.socket = new TwitchIRC(channel);
+    state.socket.on('open', () => {
+      state.connected = true;
+      ui.connectBtn.textContent = '中斷連線';
+      ui.connectBtn.disabled = false;
+      toastMgr.show(`已連線至 Twitch 頻道：${channel}`, 'check_circle', 3000);
+      clearEvents();
+    });
+    state.socket.on('message', msg => {
+      const event = parseTwitchEvent(msg);
+      if (event) {
+        renderEvent(event);
+      }
+    });
+    state.socket.on('close', () => {
+      state.connected = false;
+      ui.connectBtn.textContent = '連線 Twitch IRC';
+      toastMgr.show('連線已斷開', 'warning', 3000);
+    });
+    state.socket.on('error', e => {
+      toastMgr.show('連線錯誤，請稍後再試。', 'error', 6000);
+      console.error('WebSocket錯誤:', e);
+    });
+    ui.connectBtn.disabled = true;
+    state.socket.connect();
+  }
+  function disconnectIRC() {
+    if (state.socket) {
+      state.socket.disconnect();
+      state.socket = null;
+      state.connected = false;
+      ui.connectBtn.textContent = '連線 Twitch IRC';
+      toastMgr.show('已手動斷開連線', 'info', 3000);
+    }
+  }
+  function clearEvents() {
+    state.events = [];
+    updateBadges();
+    renderTable(state.filterType);
+  }
+  ui.sidebar.querySelectorAll('li').forEach(li => {
+    li.addEventListener('click', () => {
+      changeFilter(li.dataset.type);
+      setActiveSidebarItem(li);
+      if (ui.subTitle) {
+        // Extract only text nodes to avoid icon and badge text
+        let text = '';
+        li.childNodes.forEach(node => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            text += node.textContent.trim();
+          }
+        });
+        ui.subTitle.textContent = text || li.textContent.trim();
+      }
+    });
+    li.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        li.click();
+      }
+    });
+  });
+  function changeFilter(type) {
+    state.filterType = type;
+    renderTable(type);
+  }
+  function setActiveSidebarItem(activeLi) {
+    ui.sidebar.querySelectorAll('li').forEach(li => {
+      li.classList.remove('active');
+      li.setAttribute('aria-pressed', 'false');
+    });
+    if (activeLi) {
+      activeLi.classList.add('active');
+      activeLi.setAttribute('aria-pressed', 'true');
+    }
+  }
+  ui.menuToggle.addEventListener('click', () => {
+    const isOpen = ui.sidebar.classList.contains('mobile-visible');
+    if (isOpen) {
+      ui.sidebar.classList.remove('mobile-visible');
+      ui.menuToggle.setAttribute('aria-expanded', 'false');
+    } else {
+      ui.sidebar.classList.add('mobile-visible');
+      ui.menuToggle.setAttribute('aria-expanded', 'true');
+    }
+  });
+  initTheme();
+  updateBadges();
+  window.addEventListener('keydown', e => {
+    if (e.key === ' ' && document.activeElement !== ui.channelInput) {
+      e.preventDefault();
+      ui.connectBtn.click();
+    }
+  });
+  function handleFirstTab(e) {
+    if (e.key === 'Tab') {
+      document.body.classList.add('user-is-tabbing');
+      window.removeEventListener('keydown', handleFirstTab);
+    }
+  }
+  window.addEventListener('keydown', handleFirstTab);
+  ui.exportCsvBtn.addEventListener('click', () => {
+    if (state.events.length === 0) {
+      toastMgr.show('沒有可匯出的事件資料。', 'warning', 3000);
+      return;
+    }
+    const headers = ['時間', '名稱', '類型', '數量'];
+    const rows = state.events.map(ev => [
+      formatDateTime(ev.timestamp),
+      ev.combinedName,
+      ev.type === 'bits' ? '小奇點 Cheer' : ev.type === 'gift' ? '贈送訂閱' : ev.type,
+      ev.amount.toString()
+    ]);
+    const csvContent =
+      headers.join(',') + '\n' +
+      rows.map(r =>
+        r.map(field =>
+          `"${String(field).replace(/"/g, '""')}"`
+        ).join(',')
+      ).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const timestamp = new Date().toISOString().replace(/[-:.]/g, '').slice(0,15);
+    link.download = `twitch_bits_gifts_${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toastMgr.show('CSV 檔案已準備好下載。', 'check_circle', 3000);
+  });
+})();
+</script>
+</body>
+</html>
