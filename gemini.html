@@ -272,7 +272,7 @@
   }
   table.event-table tbody tr {
     background: var(--table-row-bg);
-    border-radius: var(--border-radius-lg);
+    border-radius: var(--border-radius-lg); /* Overall rounded corners for the row */
     transition: background-color 0.3s ease;
   }
   table.event-table tbody tr:hover {
@@ -280,13 +280,9 @@
   }
   table.event-table tbody td {
     padding: 12px 16px;
-    /* Removed transparent border-top, relying on border-spacing for visual separation */
     vertical-align: middle;
-    /* Applying border-radius to first and last cell of row */
-    border-bottom-left-radius: var(--border-radius-lg); /* Only first cell */
-    border-top-left-radius: var(--border-radius-lg); /* Only first cell */
-    border-bottom-right-radius: var(--border-radius-lg); /* Only last cell */
-    border-top-right-radius: var(--border-radius-lg); /* Only last cell */
+    /* Removed specific border-radius from here to ensure only first/last cells have them */
+    /* This rule should NOT apply any border-radius */
   }
   /* Adjustments for rounded corners on first/last cells */
   table.event-table tbody tr td:first-child {
@@ -453,7 +449,7 @@
 </div>
 <div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
 <footer role="contentinfo">
-  © 2025 Twitch 小奇點與 贈訂擷取器 | mao030
+  © 2024 Twitch 小奇點與 贈訂擷取器 | 開發者: BLACKBOXAI 版權所有
 </footer>
 <script>
 (() => {
@@ -678,7 +674,7 @@
     /**
      * 向 WebSocket 發送原始 IRC 命令。
      * @param {string} cmd - 要發送的 IRC 命令。
-     */
+   */
     sendRaw(cmd) {
       if (this.connected && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         this.websocket.send(cmd + '\r\n');
@@ -795,15 +791,15 @@
     const trailing = msg.trailing;
     const timestamp = new Date(); // 使用當前時間作為事件時間
 
-    const username = tags['login'] || '';
-    const displayName = tags['display-name'] || username;
+    const username = tags['login'] || ''; // login-name (小寫)
+    const displayName = tags['display-name'] || username; // user-name (顯示名稱，保留大小寫)
 
     // 調整名稱格式為 display-name (login-name)
     // 如果 login-name 和 display-name 相同，則只顯示 display-name
     // 如果只有 login-name，則顯示 login-name
     // 如果都沒有，則顯示 '匿名'
     let combinedNameFormatted;
-    if (displayName && username && displayName !== username) {
+    if (displayName && username && displayName.toLowerCase() !== username.toLowerCase()) { // 確保不區分大小寫地比較
       combinedNameFormatted = `${displayName} (${username})`;
     } else if (displayName) {
       combinedNameFormatted = displayName;
@@ -812,7 +808,6 @@
     } else {
       combinedNameFormatted = '匿名';
     }
-
 
     let event = null;
 
