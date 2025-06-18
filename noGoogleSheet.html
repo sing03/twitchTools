@@ -1,11 +1,11 @@
-!DOCTYPE html>
-html lang="zh-Hant">
-head>
-meta charset="UTF-8" />
-meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-title>Twitch 小奇點 &amp; 贈訂 資訊擷取器/title>
-link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
-style>
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Twitch 小奇點 &amp; 贈訂 資訊擷取器</title>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+<style>
   /* Reset & base */
   *, *::before, *::after {
     box-sizing: border-box;
@@ -49,6 +49,7 @@ style>
     align-items: center;
     padding: 0 24px;
     z-index: 101;
+    gap: 12px;
   }
   header .menu-button {
     background: transparent;
@@ -178,9 +179,19 @@ style>
   main.content h1 {
     font-weight: 800;
     font-size: clamp(1.5rem, 3vw, 2.5rem);
-    margin-bottom: 24px;
+    margin-bottom: 0;
     color: #c7d2fe;
     user-select: none;
+    display: none; /* hidden since replaced by subTitle */
+  }
+  /* New subtitle style below main header */
+  #subTitle {
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: #c7d2fe;
+    margin-bottom: 24px;
+    user-select: none;
+    transition: color 0.3s ease;
   }
   main.content .input-group {
     max-width: 480px;
@@ -372,64 +383,64 @@ style>
       font-size: 0.9rem;
     }
   }
-/style>
-/head>
-body>
-header role="banner" aria-label="主選單區">
-  button id="menu-toggle" class="menu-button" aria-label="切換選單" title="切換選單" aria-expanded="false" aria-controls="sidebar">
-    span class="material-icons">menu/span>
-  /button>
-  div class="brand" tabindex="0" id="mainTitle">Twitch Bits 與 贈訂擷取/div>
-/header>
-div id="app">
-  nav class="sidebar" id="sidebar" aria-label="主要導航">
-    h2 tabindex="0">事件分類/h2>
-    ul>
-      li class="active" data-type="all" tabindex="0" role="button" aria-pressed="true" aria-label="顯示所有事件">
-        span class="material-icons">view_stream/span>全部事件span class="badge" id="badge-all" style="display:none;">/span>
-      /li>
-      li data-type="bits" tabindex="0" role="button" aria-pressed="false" aria-label="顯示小奇點贊助事件">
-        span class="material-icons">local_play/span>小奇點 (Bits)span class="badge" id="badge-bits" style="display:none;">/span>
-      /li>
-      li data-type="gift" tabindex="0" role="button" aria-pressed="false" aria-label="顯示贈訂事件">
-        span class="material-icons">card_giftcard/span>贈送訂閱span class="badge" id="badge-gift" style="display:none;">/span>
-      /li>
-    /ul>
-  /nav>
-  main class="content" role="main">
-    p id="subTitle" aria-live="polite" aria-atomic="true" style="margin-top:0; margin-bottom:24px;">全部事件/p>
+</style>
+</head>
+<body>
+<header role="banner" aria-label="主選單區">
+  <button id="menu-toggle" class="menu-button" aria-label="切換選單" title="切換選單" aria-expanded="false" aria-controls="sidebar">
+    <span class="material-icons">menu</span>
+  </button>
+  <div class="brand" tabindex="0" id="mainTitle">Twitch Bits 與 贈訂擷取</div>
+</header>
+<div id="app">
+  <nav class="sidebar" id="sidebar" aria-label="主要導航">
+    <h2 tabindex="0">事件分類</h2>
+    <ul>
+      <li class="active" data-type="all" tabindex="0" role="button" aria-pressed="true" aria-label="顯示所有事件">
+        <span class="material-icons">view_stream</span>全部事件<span class="badge" id="badge-all" style="display:none;"></span>
+      </li>
+      <li data-type="bits" tabindex="0" role="button" aria-pressed="false" aria-label="顯示小奇點贊助事件">
+        <span class="material-icons">local_play</span>小奇點 (Bits)<span class="badge" id="badge-bits" style="display:none;"></span>
+      </li>
+      <li data-type="gift" tabindex="0" role="button" aria-pressed="false" aria-label="顯示贈訂事件">
+        <span class="material-icons">card_giftcard</span>贈送訂閱<span class="badge" id="badge-gift" style="display:none;"></span>
+      </li>
+    </ul>
+  </nav>
+  <main class="content" role="main">
+    <p id="subTitle" aria-live="polite" aria-atomic="true" style="margin-top:0; margin-bottom:24px;">全部事件</p>
 
-    section aria-label="頻道設定區" class="input-group">
-      label for="channelName">輸入要觀察的 Twitch 頻道ID：/label>
-      input type="text" id="channelName" placeholder="例如：ninja" aria-describedby="channelHelp" autocomplete="off" />
-      button class="connect-btn" id="connectBtn" disabled>連線 Twitch IRC/button>
-      small id="channelHelp">輸入正確的頻道ID以擷取聊天室事件。/small>
-    /section>
-    section aria-label="匯出功能" class="btn-group" style="user-select:none;">
-      button class="export-btn" id="exportCsvBtn" aria-label="下載 CSV 檔案">下載 CSV 檔案/button>
-    /section>
-    section aria-label="事件列表" class="table-wrapper" tabindex="0">
-      table class="event-table" role="grid" aria-live="polite" aria-relevant="all">
-        thead>
-          tr>
-            th scope="col" style="width: 160px;">時間/th>
-            th scope="col" style="width: 380px;">名稱/th>
-            th scope="col" style="width: 300px;">類型/th>
-            th scope="col" style="width: 160px;">數量/th>
-          /tr>
-        /thead>
-        tbody id="eventTableBody">
-          !-- 動態項目 -->
-        /tbody>
-      /table>
-    /section>
-  /main>
-/div>
-div id="toast-container" aria-live="assertive" aria-atomic="true">/div>
-footer role="contentinfo">
-  © 2025 Twitch 小奇點與 贈訂擷取器
-/footer>
-script>
+    <section aria-label="頻道設定區" class="input-group">
+      <label for="channelName">輸入要觀察的 Twitch 頻道ID：</label>
+      <input type="text" id="channelName" placeholder="例如：ninja" aria-describedby="channelHelp" autocomplete="off" />
+      <button class="connect-btn" id="connectBtn" disabled>連線 Twitch IRC</button>
+      <small id="channelHelp">輸入正確的頻道ID以擷取聊天室事件。</small>
+    </section>
+    <section aria-label="匯出功能" class="btn-group" style="user-select:none;">
+      <button class="export-btn" id="exportCsvBtn" aria-label="下載 CSV 檔案">下載 CSV 檔案</button>
+    </section>
+    <section aria-label="事件列表" class="table-wrapper" tabindex="0">
+        <table class="event-table" role="grid" aria-live="polite" aria-relevant="all">
+          <thead>
+            <tr>
+              <th scope="col" style="width: 160px;">時間</th>
+              <th scope="col" style="width: 380px;">名稱</th>
+              <th scope="col" style="width: 300px;">類型</th>
+              <th scope="col" style="width: 160px;">數量</th>
+            </tr>
+          </thead>
+          <tbody id="eventTableBody">
+            <!-- 動態項目 -->
+          </tbody>
+        </table>
+    </section>
+  </main>
+</div>
+<div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
+<footer role="contentinfo">
+  © 2025 mao030
+</footer>
+<script>
 (() => {
   'use strict';
   function formatDateTime(date) {
@@ -450,7 +461,7 @@ script>
       toast.setAttribute('role', 'alert');
       toast.setAttribute('aria-live', 'assertive');
       toast.setAttribute('aria-atomic', 'true');
-      toast.innerHTML = `span class="material-icons toast-icon">${icon}/span>${message}`;
+      toast.innerHTML = `<span class="material-icons toast-icon">${icon}</span>${message}`;
       this.container.appendChild(toast);
       this.toasts.push(toast);
       setTimeout(() => {
@@ -600,7 +611,7 @@ script>
         const split = [];
         let current = '';
         let trailingStarted = false;
-        for(let i=0; irest.length; i++) {
+        for(let i=0; i<rest.length; i++) {
           if (!trailingStarted) {
             if (rest[i] === ' ') {
               if (current.length > 0) {
@@ -762,9 +773,9 @@ script>
       nameTd.className = 'user-name';
       const typeTd = document.createElement('td');
       if (ev.type === 'bits') {
-        typeTd.innerHTML = 'span class="material-icons" aria-hidden="true">local_play/span>小奇點 Cheer';
+        typeTd.innerHTML = '<span class="material-icons" aria-hidden="true">local_play</span>小奇點 Cheer';
       } else if (ev.type === 'gift') {
-        typeTd.innerHTML = 'span class="material-icons" aria-hidden="true">card_giftcard/span>贈送訂閱';
+        typeTd.innerHTML = '<span class="material-icons" aria-hidden="true">card_giftcard</span>贈送訂閱';
       } else {
         typeTd.textContent = ev.type;
       }
@@ -787,7 +798,6 @@ script>
     }
     return '';
   }
-
   ui.connectBtn.addEventListener('click', () => {
     if (state.connected) {
       disconnectIRC();
@@ -800,7 +810,6 @@ script>
       connectIRC(channel);
     }
   });
-
   function connectIRC(channel) {
     if (state.connected) return;
     state.channel = channel;
@@ -830,7 +839,6 @@ script>
     ui.connectBtn.disabled = true;
     state.socket.connect();
   }
-
   function disconnectIRC() {
     if (state.socket) {
       state.socket.disconnect();
@@ -840,22 +848,17 @@ script>
       toastMgr.show('已手動斷開連線', 'info', 3000);
     }
   }
-
   function clearEvents() {
     state.events = [];
     updateBadges();
     renderTable(state.filterType);
   }
-
   ui.sidebar.querySelectorAll('li').forEach(li => {
     li.addEventListener('click', () => {
       changeFilter(li.dataset.type);
       setActiveSidebarItem(li);
-      // Hide main h1 title — keep hidden so only subTitle visible
-      const mainH1 = document.querySelector('main.content > h1');
-      if (mainH1) mainH1.style.display = 'none';
-      // Update subTitle only with pure text (excluding icon/badge)
       if (ui.subTitle) {
+        // Only show raw text without icons or badges
         let text = '';
         li.childNodes.forEach(node => {
           if (node.nodeType === Node.TEXT_NODE) {
@@ -865,30 +868,19 @@ script>
         ui.subTitle.textContent = text || li.textContent.trim();
       }
     });
-    li.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        li.click();
-      }
-    });
+    li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); li.click(); }});
   });
-
   function changeFilter(type) {
     state.filterType = type;
     renderTable(type);
   }
-
   function setActiveSidebarItem(activeLi) {
-    ui.sidebar.querySelectorAll('li').forEach(li => {
-      li.classList.remove('active');
-      li.setAttribute('aria-pressed', 'false');
-    });
+    ui.sidebar.querySelectorAll('li').forEach(li => { li.classList.remove('active'); li.setAttribute('aria-pressed', 'false'); });
     if (activeLi) {
       activeLi.classList.add('active');
       activeLi.setAttribute('aria-pressed', 'true');
     }
   }
-
   ui.menuToggle.addEventListener('click', () => {
     const isOpen = ui.sidebar.classList.contains('mobile-visible');
     if (isOpen) {
@@ -899,7 +891,21 @@ script>
       ui.menuToggle.setAttribute('aria-expanded', 'true');
     }
   });
-
+  initTheme();
+  updateBadges();
+  window.addEventListener('keydown', e => {
+    if (e.key === ' ' && document.activeElement !== ui.channelInput) {
+      e.preventDefault();
+      ui.connectBtn.click();
+    }
+  });
+  function handleFirstTab(e) {
+    if (e.key === 'Tab') {
+      document.body.classList.add('user-is-tabbing');
+      window.removeEventListener('keydown', handleFirstTab);
+    }
+  }
+  window.addEventListener('keydown', handleFirstTab);
   ui.exportCsvBtn.addEventListener('click', () => {
     if (state.events.length === 0) {
       toastMgr.show('沒有可匯出的事件資料。', 'warning', 3000);
@@ -919,7 +925,6 @@ script>
           `"${String(field).replace(/"/g, '""')}"`
         ).join(',')
       ).join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -930,20 +935,9 @@ script>
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-
     toastMgr.show('CSV 檔案已準備好下載。', 'check_circle', 3000);
   });
-
-  // Initialize on load
-  window.addEventListener('load', () => {
-    // Show h1 title hidden, only show subTitle start text
-    const mainH1 = document.querySelector('main.content > h1');
-    if (mainH1) mainH1.style.display = 'none';
-    if (ui.subTitle) {
-      ui.subTitle.textContent = '全部事件';
-    }
-  });
 })();
-/script>
-/body>
-/html>
+</script>
+</body>
+</html>
