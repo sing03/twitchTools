@@ -1,0 +1,949 @@
+!DOCTYPE html>
+html lang="zh-Hant">
+head>
+meta charset="UTF-8" />
+meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+title>Twitch 小奇點 &amp; 贈訂 資訊擷取器/title>
+link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+style>
+  /* Reset & base */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0; font-family: 'Inter', 'Noto Sans TC', sans-serif;
+    background: linear-gradient(135deg, #1e1967 0%, #2e2a85 90%);
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  a {
+    color: inherit; text-decoration: none;
+  }
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #2a2672;
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #5a57b9;
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #423ea5;
+  }
+  /* Header */
+  header {
+    position: sticky;
+    top: 0;
+    height: 64px;
+    backdrop-filter: blur(20px);
+    background: rgba(36, 33, 94, 0.65);
+    box-shadow: 0 2px 12px rgb(20 16 65 / 0.7);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    z-index: 101;
+  }
+  header .menu-button {
+    background: transparent;
+    border: none;
+    color: #cbd5e1;
+    cursor: pointer;
+    font-size: 28px;
+    padding: 6px 8px 6px 0;
+    border-radius: 12px;
+    transition: background-color 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  header .menu-button:hover,
+  header .menu-button:focus {
+    background: rgba(255 255 255 / 0.12);
+    outline: none;
+  }
+  header .menu-button .material-icons {
+    font-size: 28px;
+    user-select: none;
+  }
+  header .brand {
+    font-weight: 900;
+    font-size: clamp(1.25rem, 1.5vw, 1.75rem);
+    letter-spacing: 0.08em;
+    background: linear-gradient(45deg, #9f7aea, #38bdf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    user-select: none;
+  }
+
+  /* Layout */
+  #app {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: calc(100vh - 64px);
+    overflow: hidden;
+  }
+  /* Sidebar */
+  nav.sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: rgba(40,36,105,0.9);
+    backdrop-filter: blur(24px);
+    border-right: 1px solid rgba(79,70,229,0.3);
+    display: flex;
+    flex-direction: column;
+    padding-top: 20px;
+    color: #d6d8db;
+    transition: transform 0.3s ease;
+    z-index: 200;
+  }
+  nav.sidebar h2 {
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 32px;
+    letter-spacing: 0.08em;
+    user-select: none;
+    color: #ddd6fe;
+  }
+  nav.sidebar ul {
+    list-style: none;
+    padding: 0 12px;
+    margin: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
+  nav.sidebar ul li {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    border-radius: 10px;
+    cursor: pointer;
+    gap: 16px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: #c4c4ff;
+    user-select: none;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  nav.sidebar ul li:hover,
+  nav.sidebar ul li.active {
+    background: linear-gradient(135deg, #8b5cf6eb, #06b6d4);
+    color: #fff;
+  }
+  nav.sidebar ul li .material-icons {
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  nav.sidebar ul li .badge {
+    background: #d946ef;
+    border-radius: 16px;
+    padding: 2px 10px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    color: #fff;
+    user-select: none;
+  }
+  /* Mobile Sidebar Hidden */
+  nav.sidebar.mobile-hidden {
+    transform: translateX(-100%);
+    position: fixed;
+    top: 64px;
+    bottom: 0;
+    left: 0;
+    width: 280px;
+    box-shadow: 4px 0 12px rgb(20 16 65 / 0.7);
+  }
+
+  /* Overlay for mobile menu (disabled) */
+  #overlay {
+    display: none;
+  }
+
+  /* Main Content */
+  main.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 32px;
+    overflow-y: auto;
+  }
+  main.content h1 {
+    font-weight: 800;
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    margin-bottom: 24px;
+    color: #c7d2fe;
+    user-select: none;
+  }
+  main.content .input-group {
+    max-width: 480px;
+    margin-bottom: 24px;
+  }
+  main.content label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #b9bbd6;
+  }
+  main.content input[type="text"],
+  main.content input[type="password"],
+  main.content input[type="url"],
+  main.content input[type="email"] {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: none;
+    font-size: 1rem;
+    background: rgba(255 255 255 / 0.06);
+    color: #d1d5db;
+    transition: background-color 0.3s ease;
+  }
+  main.content input[type="text"]:focus,
+  main.content input[type="password"]:focus,
+  main.content input[type="url"]:focus,
+  main.content input[type="email"]:focus {
+    background: rgba(255 255 255 / 0.12);
+    outline: none;
+  }
+  main.content button.connect-btn,
+  main.content button.export-btn {
+    margin-top: 12px;
+    background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+    border: none;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 12px 28px;
+    font-size: 1rem;
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgb(8 27 59 / 0.3);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    user-select: none;
+  }
+  main.content button.connect-btn:hover:enabled,
+  main.content button.export-btn:hover:enabled {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgb(46 105 248 / 0.5);
+  }
+  main.content button.connect-btn:disabled,
+  main.content button.export-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-group {
+    margin-bottom: 16px;
+    display: flex;
+    gap: 16px;
+  }
+  /* Data table */
+  table.event-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 12px;
+    font-size: 0.95rem;
+  }
+  table.event-table thead th {
+    text-align: left;
+    font-weight: 700;
+    padding: 12px 16px;
+    color: #a5b4fc;
+    user-select: none;
+  }
+  table.event-table tbody tr {
+    background: rgba(255 255 255 / 0.06);
+    border-radius: 12px;
+    transition: background-color 0.3s ease;
+  }
+  table.event-table tbody tr:hover {
+    background: rgba(139, 92, 246, 0.25);
+  }
+  table.event-table tbody td {
+    padding: 12px 16px;
+    border-top: 1px solid transparent;
+    color: #dde1f7;
+    vertical-align: middle;
+  }
+  table.event-table tbody td > .user-name {
+    font-weight: 600;
+    max-width: 380px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  table.event-table tbody td .material-icons {
+    vertical-align: middle;
+    font-size: 20px;
+    margin-right: 4px;
+    color: #a78bfa;
+  }
+  /* Scroll container for table */
+  .table-wrapper {
+    overflow-x: auto;
+    padding-bottom: 12px;
+  }
+
+  /* Toast Notifications */
+  #toast-container {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    max-width: 320px;
+    z-index: 9999;
+  }
+  .toast {
+    background: rgba(10, 10, 30, 0.9);
+    padding: 14px 20px;
+    border-radius: 14px;
+    margin-top: 10px;
+    color: #e0e7ff;
+    box-shadow: 0 4px 20px rgb(86 89 138 / 0.7);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    opacity: 0;
+    transform: translateX(100%);
+    animation: slideInToast 0.3s forwards;
+    font-weight: 600;
+  }
+  .toast-icon {
+    font-size: 24px;
+    color: #a78bfa;
+    flex-shrink: 0;
+  }
+  @keyframes slideInToast {
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  /* Footer */
+  footer {
+    background: rgba(31, 30, 79, 0.8);
+    backdrop-filter: blur(16px);
+    color: #acb2f0;
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 12px 16px;
+    user-select: none;
+  }
+  /* Responsive */
+  @media (max-width: 1023px) {
+    nav.sidebar {
+      position: fixed;
+      top: 64px;
+      left: 0;
+      bottom: 0;
+      transform: translateX(-100%);
+      width: 280px;
+      z-index: 20;
+      box-shadow: 4px 0 12px rgba(20,16,65,0.7);
+    }
+    nav.sidebar.mobile-visible {
+      transform: translateX(0);
+      transition: transform 0.3s ease;
+    }
+    #app {
+      padding-left: 0;
+    }
+  }
+  @media (max-width: 639px) {
+    header {
+      padding: 0 16px;
+    }
+    main.content {
+      padding: 16px 20px;
+    }
+    table.event-table {
+      font-size: 0.8rem;
+    }
+    table.event-table thead th,
+    table.event-table tbody td {
+      padding: 8px 10px;
+    }
+    nav.sidebar ul li {
+      padding: 9px 12px;
+      font-size: 0.9rem;
+    }
+  }
+/style>
+/head>
+body>
+header role="banner" aria-label="主選單區">
+  button id="menu-toggle" class="menu-button" aria-label="切換選單" title="切換選單" aria-expanded="false" aria-controls="sidebar">
+    span class="material-icons">menu/span>
+  /button>
+  div class="brand" tabindex="0" id="mainTitle">Twitch Bits 與 贈訂擷取/div>
+/header>
+div id="app">
+  nav class="sidebar" id="sidebar" aria-label="主要導航">
+    h2 tabindex="0">事件分類/h2>
+    ul>
+      li class="active" data-type="all" tabindex="0" role="button" aria-pressed="true" aria-label="顯示所有事件">
+        span class="material-icons">view_stream/span>全部事件span class="badge" id="badge-all" style="display:none;">/span>
+      /li>
+      li data-type="bits" tabindex="0" role="button" aria-pressed="false" aria-label="顯示小奇點贊助事件">
+        span class="material-icons">local_play/span>小奇點 (Bits)span class="badge" id="badge-bits" style="display:none;">/span>
+      /li>
+      li data-type="gift" tabindex="0" role="button" aria-pressed="false" aria-label="顯示贈訂事件">
+        span class="material-icons">card_giftcard/span>贈送訂閱span class="badge" id="badge-gift" style="display:none;">/span>
+      /li>
+    /ul>
+  /nav>
+  main class="content" role="main">
+    p id="subTitle" aria-live="polite" aria-atomic="true" style="margin-top:0; margin-bottom:24px;">全部事件/p>
+
+    section aria-label="頻道設定區" class="input-group">
+      label for="channelName">輸入要觀察的 Twitch 頻道ID：/label>
+      input type="text" id="channelName" placeholder="例如：ninja" aria-describedby="channelHelp" autocomplete="off" />
+      button class="connect-btn" id="connectBtn" disabled>連線 Twitch IRC/button>
+      small id="channelHelp">輸入正確的頻道ID以擷取聊天室事件。/small>
+    /section>
+    section aria-label="匯出功能" class="btn-group" style="user-select:none;">
+      button class="export-btn" id="exportCsvBtn" aria-label="下載 CSV 檔案">下載 CSV 檔案/button>
+    /section>
+    section aria-label="事件列表" class="table-wrapper" tabindex="0">
+      table class="event-table" role="grid" aria-live="polite" aria-relevant="all">
+        thead>
+          tr>
+            th scope="col" style="width: 160px;">時間/th>
+            th scope="col" style="width: 380px;">名稱/th>
+            th scope="col" style="width: 300px;">類型/th>
+            th scope="col" style="width: 160px;">數量/th>
+          /tr>
+        /thead>
+        tbody id="eventTableBody">
+          !-- 動態項目 -->
+        /tbody>
+      /table>
+    /section>
+  /main>
+/div>
+div id="toast-container" aria-live="assertive" aria-atomic="true">/div>
+footer role="contentinfo">
+  © 2024 Twitch 小奇點與 贈訂擷取器 | 開發者: BLACKBOXAI 版權所有
+/footer>
+script>
+(() => {
+  'use strict';
+  function formatDateTime(date) {
+    return date.toLocaleString(undefined, {
+      hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  }
+  class ToastManager {
+    constructor(container) {
+      this.container = container;
+      this.toasts = [];
+    }
+    show(message, icon = 'info', duration = 4000) {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.setAttribute('role', 'alert');
+      toast.setAttribute('aria-live', 'assertive');
+      toast.setAttribute('aria-atomic', 'true');
+      toast.innerHTML = `span class="material-icons toast-icon">${icon}/span>${message}`;
+      this.container.appendChild(toast);
+      this.toasts.push(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+          if (this.container.contains(toast)) {
+            this.container.removeChild(toast);
+          }
+          this.toasts = this.toasts.filter(t => t !== toast);
+        }, 300);
+      }, duration);
+    }
+  }
+  const state = {
+    socket: null,
+    connected: false,
+    events: [],
+    filterType: 'all',
+    channel: '',
+    userToken: '',
+    bitsCount: 0,
+    giftCount: 0,
+  };
+  const ui = {
+    channelInput: document.getElementById('channelName'),
+    connectBtn: document.getElementById('connectBtn'),
+    eventTableBody: document.getElementById('eventTableBody'),
+    sidebar: document.getElementById('sidebar'),
+    menuToggle: document.getElementById('menu-toggle'),
+    badges: {
+      all: document.getElementById('badge-all'),
+      bits: document.getElementById('badge-bits'),
+      gift: document.getElementById('badge-gift')
+    },
+    exportCsvBtn: document.getElementById('exportCsvBtn'),
+    subTitle: document.getElementById('subTitle'),
+  };
+  const toastMgr = new ToastManager(document.getElementById('toast-container'));
+  function validateChannelName(name) {
+    if (typeof name !== 'string') return false;
+    return /^[a-z0-9_]{4,25}$/.test(name.trim().toLowerCase());
+  }
+  ui.channelInput.addEventListener('input', () => {
+    const val = ui.channelInput.value.trim().toLowerCase();
+    ui.connectBtn.disabled = !validateChannelName(val);
+  });
+  class TwitchIRC {
+    constructor(channel, token = '') {
+      this.channel = channel.toLowerCase();
+      this.token = token;
+      this.websocket = null;
+      this.listeners = {};
+      this.reconnectInterval = 5000;
+      this.connected = false;
+      this.nick = token ? this.getUserFromToken(token) : 'justinfan' + Math.floor(Math.random()*80000);
+      this._reconnectTimer = null;
+    }
+    getUserFromToken(token) {
+      return 'justinfan' + Math.floor(Math.random()*80000);
+    }
+    connect() {
+      if (this.connected) return;
+      const wsUrl = 'wss://irc-ws.chat.twitch.tv:443';
+      this.websocket = new WebSocket(wsUrl);
+      this.websocket.addEventListener('open', () => this.onOpen());
+      this.websocket.addEventListener('message', e => this.onMessage(e));
+      this.websocket.addEventListener('close', e => this.onClose(e));
+      this.websocket.addEventListener('error', e => this.onError(e));
+    }
+    disconnect() {
+      if (!this.connected) return;
+      this.websocket.close(1000, 'Client disconnect');
+      this.connected = false;
+    }
+    onOpen() {
+      this.connected = true;
+      const nick = this.nick;
+      this.sendRaw(`PASS ${this.token || 'SCHMOOPIIE'}`);
+      this.sendRaw(`NICK ${nick}`);
+      this.sendRaw('CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership');
+      this.sendRaw(`JOIN #${this.channel}`);
+      this.emit('open');
+    }
+    onMessage(event) {
+      const msg = event.data;
+      if (msg.startsWith('PING')) {
+        this.sendRaw('PONG :tmi.twitch.tv');
+        return;
+      }
+      const parsed = this.parseIRCMessage(msg);
+      if (parsed) {
+        this.emit('message', parsed);
+      }
+    }
+    onClose(event) {
+      this.connected = false;
+      this.emit('close', event);
+      if (!event.wasClean) {
+        if (!this._reconnectTimer) {
+          this._reconnectTimer = setTimeout(() => {
+            this._reconnectTimer = null;
+            this.connect();
+          }, this.reconnectInterval);
+        }
+      }
+    }
+    onError(event) {
+      this.emit('error', event);
+    }
+    sendRaw(cmd) {
+      if (this.connected && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        this.websocket.send(cmd + '\r\n');
+      }
+    }
+    parseIRCMessage(raw) {
+      const message = {
+        raw,
+        tags: {},
+        prefix: '',
+        command: '',
+        params: [],
+        trailing: '',
+      };
+      let rest = raw;
+      if (rest.startsWith('@')) {
+        const endTags = rest.indexOf(' ');
+        if (endTags === -1) return null;
+        const tagsStr = rest.slice(1, endTags);
+        rest = rest.slice(endTags + 1);
+        tagsStr.split(';').forEach(tagPair => {
+          const [key, ...vals] = tagPair.split('=');
+          message.tags[key] = vals.join('=') || '';
+        });
+      }
+      if (rest.startsWith(':')) {
+        const endPrefix = rest.indexOf(' ');
+        message.prefix = rest.slice(1, endPrefix);
+        rest = rest.slice(endPrefix + 1);
+      }
+      const firstSpace = rest.indexOf(' ');
+      if (firstSpace === -1) {
+        message.command = rest;
+      } else {
+        message.command = rest.slice(0, firstSpace);
+        rest = rest.slice(firstSpace + 1);
+        const split = [];
+        let current = '';
+        let trailingStarted = false;
+        for(let i=0; irest.length; i++) {
+          if (!trailingStarted) {
+            if (rest[i] === ' ') {
+              if (current.length > 0) {
+                split.push(current);
+                current = '';
+              }
+            } else if (rest[i] === ':' && split.length > 0) {
+              trailingStarted = true;
+              current = rest.slice(i+1);
+              break;
+            } else {
+              current += rest[i];
+            }
+          }
+        }
+        if (current.length > 0) split.push(current);
+        message.params = split;
+        if (trailingStarted) {
+          message.trailing = current;
+        }
+      }
+      return message;
+    }
+    on(event, cb) {
+      if (!this.listeners[event]) {
+        this.listeners[event] = [];
+      }
+      this.listeners[event].push(cb);
+    }
+    off(event, cb) {
+      if (!this.listeners[event]) return;
+      this.listeners[event] = this.listeners[event].filter(fn => fn !== cb);
+    }
+    emit(event, data) {
+      if (this.listeners[event]) {
+        this.listeners[event].forEach(cb => cb(data));
+      }
+    }
+  }
+  function parseTwitchEvent(msg) {
+    const tags = msg.tags;
+    const command = msg.command;
+    const trailing = msg.trailing;
+    let event = null;
+    const timestamp = new Date();
+    const userId = tags['user-id'] || '';
+    const username = tags['login'] || '';
+    const displayName = tags['display-name'] || username;
+    const combinedName = username && displayName ? `${username}#${displayName}` : username || displayName || '';
+    if (command === 'PRIVMSG' && tags.bits && tags.bits !== '0') {
+      const bitsAmount = parseInt(tags.bits, 10);
+      const messageText = trailing || '';
+      event = {
+        timestamp,
+        userId,
+        username,
+        displayName,
+        combinedName,
+        type: 'bits',
+        amount: bitsAmount,
+        message: messageText,
+        rawTags: tags,
+      };
+    }
+    else if (command === 'NOTICE' && tags['msg-id'] === 'subgift') {
+      const gifterUserId = tags['user-id'] || '';
+      const gifterUsername = tags['login'] || '';
+      const gifterDisplayName = tags['display-name'] || gifterUsername;
+      const recipientUserId = tags['msg-param-recipient-id'] || '';
+      const recipientName = tags['msg-param-recipient-display-name'] || '';
+      const tier = tags['msg-param-sub-plan'] || '';
+      const tierMap = {
+        '1000': 'Tier 1',
+        '2000': 'Tier 2',
+        '3000': 'Tier 3',
+      };
+      const tierName = tierMap[tier] || tier;
+      const combinedNameGift = gifterUsername && gifterDisplayName ? `${gifterUsername}#${gifterDisplayName}` : gifterUsername || gifterDisplayName || '';
+      event = {
+        timestamp,
+        userId: gifterUserId,
+        username: gifterUsername,
+        displayName: gifterDisplayName,
+        combinedName: combinedNameGift,
+        type: 'gift',
+        amount: 1,
+        recipientUserId,
+        recipientName,
+        tier: tierName,
+        message: trailing || '',
+        rawTags: tags,
+      };
+    }
+    else if (command === 'NOTICE' && (tags['msg-id'] === 'submysterygift' || tags['msg-id'] === 'subgift')) {
+      const gifterUserId = tags['user-id'] || '';
+      const gifterUsername = tags['login'] || '';
+      const gifterDisplayName = tags['display-name'] || gifterUsername;
+      const tier = tags['msg-param-sub-plan'] || '';
+      const tierMap = {
+        '1000': 'Tier 1',
+        '2000': 'Tier 2',
+        '3000': 'Tier 3',
+      };
+      const tierName = tierMap[tier] || tier;
+      let count = 1;
+      if (tags['msg-param-mass-gift-count']) {
+        count = parseInt(tags['msg-param-mass-gift-count'], 10);
+      }
+      const combinedNameMassGift = gifterUsername && gifterDisplayName ? `${gifterUsername}#${gifterDisplayName}` : gifterUsername || gifterDisplayName || '';
+      event = {
+        timestamp,
+        userId: gifterUserId,
+        username: gifterUsername,
+        displayName: gifterDisplayName,
+        combinedName: combinedNameMassGift,
+        type: 'gift',
+        amount: count,
+        recipientUserId: '',
+        recipientName: '',
+        tier: tierName,
+        message: trailing || '',
+        rawTags: tags,
+      };
+    }
+    return event;
+  }
+  function renderEvent(event) {
+    if (!event) return;
+    state.events.unshift(event);
+    if (state.events.length > 200) {
+      state.events.pop();
+    }
+    updateBadges();
+    renderTable(state.filterType);
+    if (!document.hidden) {
+      toastMgr.show(renderToastMessage(event), event.type === 'bits' ? 'local_play' : 'card_giftcard');
+    }
+  }
+  function updateBadges() {
+    const allCount = state.events.length;
+    const bitsCount = state.events.filter(e => e.type === 'bits').length;
+    const giftCount = state.events.filter(e => e.type === 'gift').length;
+    state.bitsCount = bitsCount;
+    state.giftCount = giftCount;
+    ui.badges.all.textContent = allCount;
+    ui.badges.bits.textContent = bitsCount;
+    ui.badges.gift.textContent = giftCount;
+  }
+  function renderTable(filter = 'all') {
+    ui.eventTableBody.innerHTML = '';
+    const filtered = state.events.filter(e => filter === 'all' || e.type === filter);
+    for (const ev of filtered) {
+      const tr = document.createElement('tr');
+      const timeTd = document.createElement('td');
+      timeTd.textContent = formatDateTime(ev.timestamp);
+      timeTd.title = ev.timestamp.toISOString();
+      const nameTd = document.createElement('td');
+      nameTd.textContent = ev.combinedName;
+      nameTd.className = 'user-name';
+      const typeTd = document.createElement('td');
+      if (ev.type === 'bits') {
+        typeTd.innerHTML = 'span class="material-icons" aria-hidden="true">local_play/span>小奇點 Cheer';
+      } else if (ev.type === 'gift') {
+        typeTd.innerHTML = 'span class="material-icons" aria-hidden="true">card_giftcard/span>贈送訂閱';
+      } else {
+        typeTd.textContent = ev.type;
+      }
+      const amtTd = document.createElement('td');
+      amtTd.textContent = ev.amount.toString();
+      tr.append(timeTd, nameTd, typeTd, amtTd);
+      ui.eventTableBody.appendChild(tr);
+    }
+  }
+  function renderToastMessage(ev) {
+    if (!ev) return '';
+    if (ev.type === 'bits') {
+      return `觀眾 ${ev.combinedName} 贊助了 ${ev.amount} 小奇點！`;
+    } else if (ev.type === 'gift') {
+      if (ev.amount > 1) {
+        return `觀眾 ${ev.combinedName} 贈送了 ${ev.amount} 個訂閱 (${ev.tier})！`;
+      } else {
+        return `觀眾 ${ev.combinedName} 贈送了一個訂閱 (${ev.tier}) 給 ${ev.recipientName || '未知'}！`;
+      }
+    }
+    return '';
+  }
+
+  ui.connectBtn.addEventListener('click', () => {
+    if (state.connected) {
+      disconnectIRC();
+    } else {
+      const channel = ui.channelInput.value.trim().toLowerCase();
+      if (!validateChannelName(channel)) {
+        toastMgr.show('頻道名稱格式錯誤，請輸入有效的頻道名稱。', 'error', 6000);
+        return;
+      }
+      connectIRC(channel);
+    }
+  });
+
+  function connectIRC(channel) {
+    if (state.connected) return;
+    state.channel = channel;
+    state.socket = new TwitchIRC(channel);
+    state.socket.on('open', () => {
+      state.connected = true;
+      ui.connectBtn.textContent = '中斷連線';
+      ui.connectBtn.disabled = false;
+      toastMgr.show(`已連線至 Twitch 頻道：${channel}`, 'check_circle', 3000);
+      clearEvents();
+    });
+    state.socket.on('message', msg => {
+      const event = parseTwitchEvent(msg);
+      if (event) {
+        renderEvent(event);
+      }
+    });
+    state.socket.on('close', () => {
+      state.connected = false;
+      ui.connectBtn.textContent = '連線 Twitch IRC';
+      toastMgr.show('連線已斷開', 'warning', 3000);
+    });
+    state.socket.on('error', e => {
+      toastMgr.show('連線錯誤，請稍後再試。', 'error', 6000);
+      console.error('WebSocket錯誤:', e);
+    });
+    ui.connectBtn.disabled = true;
+    state.socket.connect();
+  }
+
+  function disconnectIRC() {
+    if (state.socket) {
+      state.socket.disconnect();
+      state.socket = null;
+      state.connected = false;
+      ui.connectBtn.textContent = '連線 Twitch IRC';
+      toastMgr.show('已手動斷開連線', 'info', 3000);
+    }
+  }
+
+  function clearEvents() {
+    state.events = [];
+    updateBadges();
+    renderTable(state.filterType);
+  }
+
+  ui.sidebar.querySelectorAll('li').forEach(li => {
+    li.addEventListener('click', () => {
+      changeFilter(li.dataset.type);
+      setActiveSidebarItem(li);
+      // Hide main h1 title — keep hidden so only subTitle visible
+      const mainH1 = document.querySelector('main.content > h1');
+      if (mainH1) mainH1.style.display = 'none';
+      // Update subTitle only with pure text (excluding icon/badge)
+      if (ui.subTitle) {
+        let text = '';
+        li.childNodes.forEach(node => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            text += node.textContent.trim();
+          }
+        });
+        ui.subTitle.textContent = text || li.textContent.trim();
+      }
+    });
+    li.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        li.click();
+      }
+    });
+  });
+
+  function changeFilter(type) {
+    state.filterType = type;
+    renderTable(type);
+  }
+
+  function setActiveSidebarItem(activeLi) {
+    ui.sidebar.querySelectorAll('li').forEach(li => {
+      li.classList.remove('active');
+      li.setAttribute('aria-pressed', 'false');
+    });
+    if (activeLi) {
+      activeLi.classList.add('active');
+      activeLi.setAttribute('aria-pressed', 'true');
+    }
+  }
+
+  ui.menuToggle.addEventListener('click', () => {
+    const isOpen = ui.sidebar.classList.contains('mobile-visible');
+    if (isOpen) {
+      ui.sidebar.classList.remove('mobile-visible');
+      ui.menuToggle.setAttribute('aria-expanded', 'false');
+    } else {
+      ui.sidebar.classList.add('mobile-visible');
+      ui.menuToggle.setAttribute('aria-expanded', 'true');
+    }
+  });
+
+  ui.exportCsvBtn.addEventListener('click', () => {
+    if (state.events.length === 0) {
+      toastMgr.show('沒有可匯出的事件資料。', 'warning', 3000);
+      return;
+    }
+    const headers = ['時間', '名稱', '類型', '數量'];
+    const rows = state.events.map(ev => [
+      formatDateTime(ev.timestamp),
+      ev.combinedName,
+      ev.type === 'bits' ? '小奇點 Cheer' : ev.type === 'gift' ? '贈送訂閱' : ev.type,
+      ev.amount.toString()
+    ]);
+    const csvContent =
+      headers.join(',') + '\n' +
+      rows.map(r =>
+        r.map(field =>
+          `"${String(field).replace(/"/g, '""')}"`
+        ).join(',')
+      ).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const timestamp = new Date().toISOString().replace(/[-:.]/g, '').slice(0,15);
+    link.download = `twitch_bits_gifts_${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toastMgr.show('CSV 檔案已準備好下載。', 'check_circle', 3000);
+  });
+
+  // Initialize on load
+  window.addEventListener('load', () => {
+    // Show h1 title hidden, only show subTitle start text
+    const mainH1 = document.querySelector('main.content > h1');
+    if (mainH1) mainH1.style.display = 'none';
+    if (ui.subTitle) {
+      ui.subTitle.textContent = '全部事件';
+    }
+  });
+})();
+/script>
+/body>
+/html>
