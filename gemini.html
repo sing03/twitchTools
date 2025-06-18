@@ -429,6 +429,7 @@
     </section>
     <section aria-label="匯出功能" class="btn-group" style="user-select:none;">
       <button class="export-btn" id="exportCsvBtn" aria-label="下載 CSV 檔案">下載 CSV 檔案</button>
+      <button class="export-btn" id="clearDataBtn" aria-label="清除所有數據">清除所有數據</button>
     </section>
     <section aria-label="事件列表" class="table-wrapper" tabindex="0">
       <table class="event-table" role="grid" aria-live="polite" aria-relevant="all">
@@ -455,10 +456,13 @@
 (() => {
   'use strict';
 
+  // Define the key name for sessionStorage
+  const SESSION_STORAGE_KEY = 'twitch_events_data';
+
   /**
-   * 格式化日期時間為本地化字串。
-   * @param {Date} date - 要格式化的 Date 物件。
-   * @returns {string} 格式化後的日期時間字串。
+   * Formats a Date object into a localized date and time string.
+   * @param {Date} date - The Date object to format.
+   * @returns {string} The formatted date and time string.
    */
   function formatDateTime(date) {
     return date.toLocaleString(undefined, {
@@ -469,7 +473,7 @@
   }
 
   /**
-   * 管理並顯示Toast通知的類別。
+   * Manages and displays Toast notifications.
    */
   class ToastManager {
     constructor(container) {
@@ -482,10 +486,10 @@
     }
 
     /**
-     * 顯示一個Toast通知。
-     * @param {string} message - 通知訊息。
-     * @param {string} [icon='info'] - Material Icons 的圖標名稱。
-     * @param {number} [duration=4000] - 通知顯示的毫秒數。
+     * Displays a Toast notification.
+     * @param {string} message - The notification message.
+     * @param {string} [icon='info'] - The Material Icons icon name.
+     * @param {number} [duration=4000] - The duration in milliseconds for which the toast is displayed.
      */
     show(message, icon = 'info', duration = 4000) {
       if (!this.container) return; // Safely exit if container is null
@@ -513,16 +517,60 @@
     }
   }
 
-  // 應用程式狀態管理
+  /**
+   * Saves event data to sessionStorage.
+   */
+  function saveEventsToSessionStorage() {
+    try {
+      // Convert Date objects to ISO strings before stringifying to handle them correctly
+      const serializableEvents = state.events.map(event => ({
+        ...event,
+        timestamp: event.timestamp.toISOString() // Convert Date object to string
+      }));
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(serializableEvents));
+    } catch (e) {
+      // Handle QuotaExceededError when sessionStorage is full
+      if (e.name === 'QuotaExceededError') {
+        toastMgr.show('瀏覽器儲存空間已滿，新數據將無法保存。', 'warning', 8000);
+        console.warn('Session storage quota exceeded. New data might not be saved.');
+      } else {
+        console.error("無法將數據儲存到 sessionStorage:", e);
+      }
+    }
+  }
+
+  /**
+   * Loads event data from sessionStorage.
+   * @returns {Array} The loaded array of event data.
+   */
+  function loadEventsFromSessionStorage() {
+    try {
+      const storedData = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (storedData) {
+        // Convert ISO strings back to Date objects after parsing
+        const parsedData = JSON.parse(storedData);
+        return parsedData.map(event => ({
+          ...event,
+          timestamp: new Date(event.timestamp) // Convert string back to Date object
+        }));
+      }
+    } catch (e) {
+      console.error("無法從 sessionStorage 載入數據:", e);
+      // If loading fails (e.g., corrupted data), return an empty array
+    }
+    return [];
+  }
+
+  // Application state management
   const state = {
     socket: null,
     connected: false,
-    events: [], // 儲存所有擷取到的事件
-    filterType: 'all', // 當前篩選類型 ('all', 'bits', 'gift')
-    channel: '', // 當前連接的頻道名稱
+    events: loadEventsFromSessionStorage(), // Load data from sessionStorage on initialization
+    filterType: 'all', // Current filter type ('all', 'bits', 'gift')
+    channel: '', // Current connected channel name
   };
 
-  // UI 元素快取
+  // Cache UI elements
   const ui = {
     channelInput: document.getElementById('channelName'),
     connectBtn: document.getElementById('connectBtn'),
@@ -535,31 +583,32 @@
       gift: document.getElementById('badge-gift')
     },
     exportCsvBtn: document.getElementById('exportCsvBtn'),
+    clearDataBtn: document.getElementById('clearDataBtn'), // Added UI element for clear data button
     subTitle: document.getElementById('subTitle'),
     sidebarItems: document.querySelectorAll('nav.sidebar ul li')
   };
 
-  // 初始化 Toast 管理器
+  // Initialize Toast manager
   const toastMgr = new ToastManager(document.getElementById('toast-container'));
 
   /**
-   * 驗證 Twitch 頻道名稱格式。
-   * @param {string} name - 頻道名稱。
-   * @returns {boolean} 如果名稱有效則為 true。
+   * Validates the Twitch channel name format.
+   * @param {string} name - The channel name.
+   * @returns {boolean} True if the name is valid.
    */
   function validateChannelName(name) {
     if (typeof name !== 'string') return false;
-    // Twitch 頻道名稱通常為 4-25 個小寫字母、數字或底線。
+    // Twitch channel names are typically 4-25 lowercase letters, numbers, or underscores.
     return /^[a-z0-9_]{4,25}$/.test(name.trim().toLowerCase());
   }
 
-  // 頻道輸入欄位監聽器：啟用/禁用連線按鈕
+  // Channel input field listener: enable/disable connect button
   ui.channelInput.addEventListener('input', () => {
     ui.connectBtn.disabled = !validateChannelName(ui.channelInput.value);
   });
 
   /**
-   * Twitch IRC 客戶端類別。
+   * Twitch IRC client class.
    */
   class TwitchIRC {
     constructor(channel, token = '') {
@@ -567,18 +616,18 @@
       this.token = token;
       this.websocket = null;
       this.listeners = {};
-      this.reconnectInterval = 5000; // 5 秒重連
+      this.reconnectInterval = 5000; // 5-second reconnect interval
       this.connected = false;
-      this.nick = 'justinfan' + Math.floor(Math.random() * 80000); // 匿名用戶名
+      this.nick = 'justinfan' + Math.floor(Math.random() * 80000); // Anonymous username
       this._reconnectTimer = null;
     }
 
     /**
-     * 建立 WebSocket 連線。
+     * Establishes a WebSocket connection.
      */
     connect() {
       if (this.connected) return;
-      // 清除可能存在的重連計時器
+      // Clear any existing reconnect timer
       if (this._reconnectTimer) {
         clearTimeout(this._reconnectTimer);
         this._reconnectTimer = null;
@@ -593,7 +642,7 @@
     }
 
     /**
-     * 斷開 WebSocket 連線。
+     * Disconnects the WebSocket connection.
      */
     disconnect() {
       if (!this.connected) return;
@@ -606,30 +655,31 @@
     }
 
     /**
-     * WebSocket 開啟時的處理函數。
+     * Handler for WebSocket open event.
      */
     onOpen() {
       this.connected = true;
       const nick = this.nick;
       this.sendRaw(`PASS ${this.token || 'SCHMOOPIIE'}`);
       this.sendRaw(`NICK ${nick}`);
-      // 請求 Twitch 特定的能力，以獲取標籤、命令和會員信息
+      // Request Twitch-specific capabilities to get tags, commands, and membership info
       this.sendRaw('CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership');
       this.sendRaw(`JOIN #${this.channel}`);
       this.emit('open');
     }
 
     /**
-     * 接收到 WebSocket 訊息時的處理函數。
-     * @param {MessageEvent} event - WebSocket 訊息事件。
+     * Handler for WebSocket message event.
+     * @param {MessageEvent} event - The WebSocket message event.
      */
     onMessage(event) {
       const msg = event.data;
+      console.log('Received raw IRC message:', msg); // Added for debugging
       if (msg.startsWith('PING')) {
-        this.sendRaw('PONG :tmi.twitch.tv'); // 回應 PING 以保持連線
+        this.sendRaw('PONG :tmi.twitch.tv'); // Respond to PING to keep connection alive
         return;
       }
-      // Twitch IRC 訊息可能包含多條訊息，需要分割處理
+      // Twitch IRC messages can contain multiple messages, need to split and process
       msg.split('\r\n').forEach(line => {
         if (line) {
           const parsed = this.parseIRCMessage(line);
@@ -641,19 +691,19 @@
     }
 
     /**
-     * WebSocket 關閉時的處理函數。
-     * @param {CloseEvent} event - WebSocket 關閉事件。
+     * Handler for WebSocket close event.
+     * @param {CloseEvent} event - The WebSocket close event.
      */
     onClose(event) {
       this.connected = false;
       this.emit('close', event);
-      // 如果不是正常關閉，嘗試重連
+      // If not a clean close, attempt to reconnect
       if (!event.wasClean) {
         console.warn(`WebSocket closed uncleanly. Attempting reconnect in ${this.reconnectInterval / 1000}s.`, event);
         if (!this._reconnectTimer) {
           this._reconnectTimer = setTimeout(() => {
             this._reconnectTimer = null;
-            this.connect(); // 嘗試重連
+            this.connect(); // Attempt to reconnect
           }, this.reconnectInterval);
         }
       } else {
@@ -662,19 +712,19 @@
     }
 
     /**
-     * WebSocket 錯誤時的處理函數。
-     * @param {Event} event - WebSocket 錯誤事件。
+     * Handler for WebSocket error event.
+     * @param {Event} event - The WebSocket error event.
      */
     onError(event) {
       console.error('WebSocket Error:', event);
       this.emit('error', event);
-      // 錯誤發生時也會觸發 onClose，因此重連邏輯主要在 onClose 處理
+      // Error event typically followed by a close event, handled in onClose
     }
 
     /**
-     * 向 WebSocket 發送原始 IRC 命令。
-     * @param {string} cmd - 要發送的 IRC 命令。
-   */
+     * Sends a raw IRC command to the WebSocket.
+     * @param {string} cmd - The IRC command to send.
+     */
     sendRaw(cmd) {
       if (this.connected && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         this.websocket.send(cmd + '\r\n');
@@ -684,10 +734,10 @@
     }
 
     /**
-     * 解析原始 IRC 訊息字串。
-     * 這是 IRC 協定解析的簡化版本，用於從 Twitch 訊息中提取標籤、命令和參數。
-     * @param {string} raw - 原始 IRC 訊息字串。
-     * @returns {Object|null} 解析後的訊息物件或 null。
+     * Parses a raw IRC message string.
+     * This is a simplified version of IRC protocol parsing, used to extract tags, commands, and parameters from Twitch messages.
+     * @param {string} raw - The raw IRC message string.
+     * @returns {Object|null} The parsed message object or null.
      */
     parseIRCMessage(raw) {
       const message = {
@@ -696,33 +746,33 @@
         prefix: '',
         command: '',
         params: [],
-        trailing: '', // 訊息的最後一部分，通常是聊天內容
+        trailing: '', // The last part of the message, usually chat content
       };
 
       let rest = raw;
 
-      // 解析標籤 (Tags)
+      // Parse Tags
       if (rest.startsWith('@')) {
         const endTags = rest.indexOf(' ');
-        if (endTags === -1) return null; // 無效格式
+        if (endTags === -1) return null; // Invalid format
         const tagsStr = rest.slice(1, endTags);
         rest = rest.slice(endTags + 1);
         tagsStr.split(';').forEach(tagPair => {
           const [key, ...vals] = tagPair.split('=');
-          message.tags[key] = vals.join('=') || ''; // 處理值中可能包含 '=' 的情況
+          message.tags[key] = vals.join('=') || ''; // Handle cases where value might contain '='
         });
       }
 
-      // 解析前綴 (Prefix)
+      // Parse Prefix
       if (rest.startsWith(':')) {
         const endPrefix = rest.indexOf(' ');
-        if (endPrefix === -1) return null; // 無效格式
+        if (endPrefix === -1) return null; // Invalid format
         message.prefix = rest.slice(1, endPrefix);
         rest = rest.slice(endPrefix + 1);
       }
 
-      // 解析命令 (Command) 和參數 (Parameters)
-      const parts = rest.split(' :'); // 將 trailing 訊息與其他部分分離
+      // Parse Command and Parameters
+      const parts = rest.split(' :'); // Split trailing message from other parts
       const commandAndParams = parts[0].trim().split(' ');
 
       message.command = commandAndParams[0];
@@ -733,9 +783,9 @@
     }
 
     /**
-     * 註冊事件監聽器。
-     * @param {string} event - 事件名稱。
-     * @param {Function} cb - 回調函數。
+     * Registers an event listener.
+     * @param {string} event - The event name.
+     * @param {Function} cb - The callback function.
      */
     on(event, cb) {
       if (!this.listeners[event]) {
@@ -745,9 +795,9 @@
     }
 
     /**
-     * 移除事件監聽器。
-     * @param {string} event - 事件名稱。
-     * @param {Function} cb - 要移除的回調函數。
+     * Removes an event listener.
+     * @param {string} event - The event name.
+     * @param {Function} cb - The callback function to remove.
      */
     off(event, cb) {
       if (!this.listeners[event]) return;
@@ -755,9 +805,9 @@
     }
 
     /**
-     * 觸發事件。
-     * @param {string} event - 事件名稱。
-     * @param {*} data - 傳遞給回調函數的數據。
+     * Emits an event.
+     * @param {string} event - The event name.
+     * @param {*} data - The data to pass to the callback functions.
      */
     emit(event, data) {
       if (this.listeners[event]) {
@@ -767,9 +817,9 @@
   }
 
   /**
-   * 根據 Event Type 返回 Material Icon 名稱和顯示文字。
-   * @param {string} type - 事件類型 ('all', 'bits', 'gift')。
-   * @returns {{icon: string, text: string}} 包含圖標名稱和顯示文字的物件。
+   * Returns Material Icon name and display text based on Event Type.
+   * @param {string} type - The event type ('all', 'bits', 'gift').
+   * @returns {{icon: string, text: string}} An object containing the icon name and display text.
    */
   function getEventIconAndText(type) {
     switch (type) {
@@ -781,25 +831,25 @@
   }
 
   /**
-   * 解析來自 Twitch IRC 的原始訊息，提取出小奇點或贈訂事件的結構化數據。
-   * @param {Object} msg - 經過 `parseIRCMessage` 解析後的 IRC 訊息物件。
-   * @returns {Object|null} 結構化的事件物件或 null。
+   * Parses raw IRC message from Twitch, extracting structured data for Bits or Gifted Subs events.
+   * @param {Object} msg - The IRC message object parsed by `parseIRCMessage`.
+   * @returns {Object|null} The structured event object or null.
    */
   function parseTwitchEvent(msg) {
     const tags = msg.tags;
     const command = msg.command;
     const trailing = msg.trailing;
-    const timestamp = new Date(); // 使用當前時間作為事件時間
+    const timestamp = new Date(); // Use current time as event time
 
-    const username = tags['login'] || ''; // login-name (小寫)
-    const displayName = tags['display-name'] || username; // user-name (顯示名稱，保留大小寫)
+    const username = tags['login'] || ''; // login-name (lowercase)
+    const displayName = tags['display-name'] || username; // user-name (display name, preserve case)
 
-    // 調整名稱格式為 display-name (login-name)
-    // 如果 login-name 和 display-name 相同，則只顯示 display-name
-    // 如果只有 login-name，則顯示 login-name
-    // 如果都沒有，則顯示 '匿名'
+    // Format name as display-name (login-name)
+    // If login-name and display-name are the same, display only display-name
+    // If only login-name exists, display login-name
+    // If neither exists, display '匿名' (anonymous)
     let combinedNameFormatted;
-    if (displayName && username && displayName.toLowerCase() !== username.toLowerCase()) { // 確保不區分大小寫地比較
+    if (displayName && username && displayName.toLowerCase() !== username.toLowerCase()) { // Compare case-insensitively
       combinedNameFormatted = `${displayName} (${username})`;
     } else if (displayName) {
       combinedNameFormatted = displayName;
@@ -811,21 +861,21 @@
 
     let event = null;
 
-    // 處理小奇點事件 (PRIVMSG 帶有 bits 標籤)
+    // Handle Bits event (PRIVMSG with bits tag)
     if (command === 'PRIVMSG' && tags.bits && tags.bits !== '0') {
       const bitsAmount = parseInt(tags.bits, 10);
       event = {
         timestamp,
         username,
         displayName,
-        combinedName: combinedNameFormatted, // 使用新的格式化名稱
+        combinedName: combinedNameFormatted, // Use the new formatted name
         type: 'bits',
         amount: bitsAmount,
-        message: trailing || '', // 小奇點的聊天訊息
+        message: trailing || '', // Chat message accompanying the bits
         rawTags: tags,
       };
     }
-    // 處理贈送訂閱事件 (NOTICE 帶有 subgift 或 submysterygift 標籤)
+    // Handle Gifted Subscription event (NOTICE with subgift or submysterygift tag)
     else if (command === 'NOTICE' && (tags['msg-id'] === 'subgift' || tags['msg-id'] === 'submysterygift')) {
       const tier = tags['msg-param-sub-plan'] || '';
       const tierMap = {'1000':'Tier 1','2000':'Tier 2','3000':'Tier 3'};
@@ -838,39 +888,45 @@
 
       event = {
         timestamp,
-        username, // 贈送者的 login 名稱
-        displayName, // 贈送者的 display 名稱
-        combinedName: combinedNameFormatted, // 使用新的格式化名稱
+        username, // Gifter's login name
+        displayName, // Gifter's display name
+        combinedName: combinedNameFormatted, // Use the new formatted name
         type: 'gift',
         amount: amount,
-        recipientName: tags['msg-param-recipient-display-name'] || '', // 單次贈送的接收者
+        recipientName: tags['msg-param-recipient-display-name'] || '', // Recipient of single gift
         tier: tierName,
-        message: trailing || '', // 通常是空字串或簡單的通知訊息
+        message: trailing || '', // Usually empty string or simple notification message
         rawTags: tags,
       };
+    } else if (command === 'NOTICE') {
+      // Log other NOTICE messages to help debug if gift notices are different
+      console.log('Received NOTICE command but not a recognized gift event:', msg.raw); // Log the raw message
+      console.log('NOTICE tags:', tags);
     }
     return event;
   }
 
   /**
-   * 處理並渲染新接收到的事件。
-   * @param {Object} event - 解析後的事件物件。
+   * Processes and renders a newly received event.
+   * @param {Object} event - The parsed event object.
    */
   function renderEvent(event) {
     if (!event) return;
 
-    // 將新事件添加到列表開頭
+    // Add new event to the beginning of the list
     state.events.unshift(event);
 
-    // 限制事件數量，避免過多數據導致效能問題
-    if (state.events.length > 200) {
-      state.events.pop(); // 移除最舊的事件
-    }
+    // Removed the 200-item limit, allowing data to accumulate until sessionStorage is full
+    // if (state.events.length > 200) {
+    //   state.events.pop(); // Remove the oldest event
+    // }
+
+    saveEventsToSessionStorage(); // Save to sessionStorage
 
     updateBadges();
     renderTable(state.filterType);
 
-    // 僅當頁面可見時顯示 Toast
+    // Display Toast only if page is visible
     if (!document.hidden) {
       const toastIconText = getEventIconAndText(event.type);
       toastMgr.show(renderToastMessage(event), toastIconText.icon);
@@ -878,14 +934,14 @@
   }
 
   /**
-   * 更新側邊欄徽章的計數。
+   * Updates badge counts in the sidebar.
    */
   function updateBadges() {
     const allCount = state.events.length;
     const bitsCount = state.events.filter(e => e.type === 'bits').length;
     const giftCount = state.events.filter(e => e.type === 'gift').length;
 
-    // 更新並顯示徽章
+    // Update and display badges
     if (ui.badges.all) {
       ui.badges.all.textContent = allCount;
       ui.badges.all.style.display = allCount > 0 ? 'inline-block' : 'none';
@@ -901,11 +957,11 @@
   }
 
   /**
-   * 根據當前篩選類型渲染事件表格。
-   * @param {string} [filter='all'] - 篩選類型 ('all', 'bits', 'gift')。
+   * Renders the event table based on the current filter type.
+   * @param {string} [filter='all'] - The filter type ('all', 'bits', 'gift').
    */
   function renderTable(filter = 'all') {
-    ui.eventTableBody.innerHTML = ''; // 清空表格內容
+    ui.eventTableBody.innerHTML = ''; // Clear table content
 
     const filteredEvents = state.events.filter(e => filter === 'all' || e.type === filter);
 
@@ -920,7 +976,7 @@
       return;
     }
 
-    // 使用 DocumentFragment 最佳化 DOM 插入
+    // Optimize DOM insertion using DocumentFragment
     const fragment = document.createDocumentFragment();
 
     for (const ev of filteredEvents) {
@@ -928,13 +984,13 @@
 
       const timeTd = document.createElement('td');
       timeTd.textContent = formatDateTime(ev.timestamp);
-      timeTd.title = ev.timestamp.toISOString(); // hover 時顯示完整 ISO 時間
+      timeTd.title = ev.timestamp.toISOString(); // Show full ISO time on hover
 
       const nameTd = document.createElement('td');
-      // 直接使用 parseTwitchEvent 處理過的 combinedName 字段
+      // Use the combinedName field processed by parseTwitchEvent
       nameTd.textContent = ev.combinedName;
       nameTd.className = 'user-name';
-      // 提示文字可以更詳細，包含原始的 display name 和 login name
+      // More detailed tooltip with original display name and login name
       nameTd.title = `顯示名稱: ${ev.displayName || '匿名'} / 登入名稱: ${ev.username || '匿名'}`;
 
       const typeTd = document.createElement('td');
@@ -954,9 +1010,9 @@
   }
 
   /**
-   * 根據事件類型生成 Toast 訊息內容。
-   * @param {Object} ev - 事件物件。
-   * @returns {string} 適合顯示在 Toast 中的訊息字串。
+   * Generates Toast message content based on event type.
+   * @param {Object} ev - The event object.
+   * @returns {string} The message string suitable for display in a Toast.
    */
   function renderToastMessage(ev) {
     if (!ev) return '';
@@ -966,15 +1022,15 @@
       if (ev.amount > 1) {
         return `觀眾 ${ev.combinedName} 贈送了 ${ev.amount} 個訂閱 (${ev.tier})！`;
       } else {
-        // 對於單一贈訂，RecipientName 在 EventSub V1 缺乏，但 IRC 可能提供
-        // 這裡確保即使沒有 recipientName 也顯示匿名或未知
+        // For single gifted subs, RecipientName might be missing in EventSub V1, but IRC might provide it.
+        // Ensure to display anonymous or unknown if recipientName is not available.
         return `觀眾 ${ev.combinedName} 贈送了一個訂閱 (${ev.tier})${ev.recipientName ? ` 給 ${ev.recipientName}` : ''}！`;
       }
     }
     return '';
   }
 
-  // 連線/中斷連線按鈕點擊處理
+  // Connect/Disconnect button click handler
   ui.connectBtn.addEventListener('click', () => {
     if (state.connected) {
       disconnectIRC();
@@ -989,8 +1045,8 @@
   });
 
   /**
-   * 連線到 Twitch IRC 聊天室。
-   * @param {string} channel - 要連線的 Twitch 頻道名稱。
+   * Connects to the Twitch IRC chat.
+   * @param {string} channel - The Twitch channel name to connect to.
    */
   function connectIRC(channel) {
     if (state.connected) return;
@@ -1001,9 +1057,9 @@
     state.socket.on('open', () => {
       state.connected = true;
       ui.connectBtn.textContent = '中斷連線';
-      ui.connectBtn.disabled = false; // 連線成功後才啟用中斷連線按鈕
+      ui.connectBtn.disabled = false; // Enable disconnect button after successful connection
       toastMgr.show(`已連線至 Twitch 頻道：${channel}`, 'check_circle', 3000);
-      clearEvents(); // 清除舊事件
+      // Removed clearEvents() here to preserve session storage data
     });
 
     state.socket.on('message', msg => {
@@ -1013,11 +1069,11 @@
       }
     });
 
-    state.socket.on('close', (event) => { // 接收 event 參數
+    state.socket.on('close', (event) => { // Receive event parameter
       state.connected = false;
       ui.connectBtn.textContent = '連線 Twitch IRC';
-      ui.connectBtn.disabled = false; // 斷開後重新啟用連線按鈕
-      // 根據關閉事件的 clean 屬性提供更具體的訊息
+      ui.connectBtn.disabled = false; // Re-enable connect button after disconnection
+      // Provide more specific message based on clean close event
       if (event && event.wasClean) {
         toastMgr.show('連線已斷開', 'info', 3000);
       } else {
@@ -1026,61 +1082,63 @@
     });
 
     state.socket.on('error', e => {
-      // 錯誤發生時，通常會緊接著觸發 close 事件，由 close 處理重連
-      // 這裡僅用於日誌和單獨的錯誤提示，避免重複的重連訊息
+      // Errors are typically followed by a close event, which handles reconnect.
+      // This is for logging and a separate error toast to avoid duplicate reconnect messages.
       toastMgr.show('連線錯誤，請檢查頻道名稱或網路連線。', 'error', 6000);
       console.error('WebSocket 錯誤:', e);
     });
 
-    ui.connectBtn.disabled = true; // 連線中禁用按鈕
+    ui.connectBtn.disabled = true; // Disable button while connecting
     state.socket.connect();
   }
 
   /**
-   * 斷開 Twitch IRC 連線。
+   * Disconnects from Twitch IRC.
    */
   function disconnectIRC() {
     if (state.socket) {
-      state.socket.disconnect(); // 觸發 onClose 事件，並在其中處理清理
+      state.socket.disconnect(); // Triggers onClose event, which handles cleanup
       toastMgr.show('已手動斷開連線', 'info', 3000);
     }
   }
 
   /**
-   * 清除所有儲存的事件並重新渲染表格和徽章。
+   * Clears all stored events and re-renders the table and badges.
    */
   function clearEvents() {
     state.events = [];
+    sessionStorage.removeItem(SESSION_STORAGE_KEY); // Completely remove data from sessionStorage
+    toastMgr.show('所有數據已清除。', 'info', 3000);
     updateBadges();
     renderTable(state.filterType);
   }
 
-  // 側邊欄項目點擊事件處理
+  // Sidebar item click handler
   ui.sidebarItems.forEach(li => {
     li.addEventListener('click', () => {
       const type = li.dataset.type;
       changeFilter(type);
       setActiveSidebarItem(li);
 
-      // 更新副標題文字 (不包含圖標和徽章文字)
+      // Update subtitle text (excluding icons and badge text)
       if (ui.subTitle) {
         const typeInfo = getEventIconAndText(type);
         ui.subTitle.textContent = typeInfo.text;
       }
     });
 
-    // 側邊欄項目的鍵盤導航 (Enter/Space)
+    // Keyboard navigation (Enter/Space) for sidebar items
     li.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault(); // 防止滾動頁面
+        e.preventDefault(); // Prevent page scrolling
         li.click();
       }
     });
   });
 
   /**
-   * 更改事件篩選類型並重新渲染表格。
-   * @param {string} type - 新的篩選類型 ('all', 'bits', 'gift')。
+   * Changes the event filter type and re-renders the table.
+   * @param {string} type - The new filter type ('all', 'bits', 'gift').
    */
   function changeFilter(type) {
     state.filterType = type;
@@ -1088,8 +1146,8 @@
   }
 
   /**
-   * 設定當前活躍的側邊欄項目樣式。
-   * @param {HTMLElement} activeLi - 當前被點擊或選中的側邊欄 `<li>` 元素。
+   * Sets the active style for the current sidebar item.
+   * @param {HTMLElement} activeLi - The currently clicked or selected sidebar `<li>` element.
    */
   function setActiveSidebarItem(activeLi) {
     ui.sidebarItems.forEach(li => {
@@ -1102,7 +1160,7 @@
     }
   }
 
-  // 菜單切換按鈕 (手機版側邊欄開關)
+  // Menu toggle button (for mobile sidebar)
   ui.menuToggle.addEventListener('click', () => {
     const isOpen = ui.sidebar.classList.contains('mobile-visible');
     if (isOpen) {
@@ -1114,19 +1172,19 @@
     }
   });
 
-  // 應用程式啟動時的初始化
-  updateBadges(); // 首次載入時更新徽章
-  renderTable(state.filterType); // 首次載入時渲染空表格
+  // Application startup initialization
+  updateBadges(); // Update badges on first load
+  renderTable(state.filterType); // Render table on first load (including loaded data)
 
-  // 全域鍵盤事件監聽器：按下空白鍵切換連線狀態 (除非在輸入框中)
+  // Global keyboard event listener: Spacebar to toggle connection (unless in input field)
   window.addEventListener('keydown', e => {
     if (e.key === ' ' && document.activeElement !== ui.channelInput) {
-      e.preventDefault(); // 防止滾動頁面
+      e.preventDefault(); // Prevent page scrolling
       ui.connectBtn.click();
     }
   });
 
-  // 輔助功能：處理首次 Tab 鍵按下，為鍵盤導航添加可視焦點
+  // Accessibility: Handle first Tab key press to add visible focus for keyboard navigation
   function handleFirstTab(e) {
     if (e.key === 'Tab') {
       document.body.classList.add('user-is-tabbing');
@@ -1135,7 +1193,7 @@
   }
   window.addEventListener('keydown', handleFirstTab);
 
-  // 匯出 CSV 按鈕點擊處理
+  // Export CSV button click handler
   ui.exportCsvBtn.addEventListener('click', () => {
     if (state.events.length === 0) {
       toastMgr.show('沒有可匯出的事件資料。', 'warning', 3000);
@@ -1145,17 +1203,17 @@
     const headers = ['時間', '名稱', '類型', '數量'];
     const rows = state.events.map(ev => [
       formatDateTime(ev.timestamp),
-      ev.combinedName, // 使用新的格式化名稱
-      getEventIconAndText(ev.type).text, // 使用輔助函數獲取類型文字
-      ev.type === 'gift' ? `${ev.amount} (${ev.tier})` : ev.amount.toString() // 贈送訂閱顯示 tier
+      ev.combinedName, // Use the new formatted name
+      getEventIconAndText(ev.type).text, // Use helper function to get type text
+      ev.type === 'gift' ? `${ev.amount} (${ev.tier})` : ev.amount.toString() // Display tier for gifted subs
     ]);
 
-    // 生成 CSV 內容
+    // Generate CSV content
     const csvContent =
-      headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(',') + '\n' + // 確保標題也正確 CSV 格式化
+      headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(',') + '\n' + // Ensure headers are also correctly CSV formatted
       rows.map(r =>
         r.map(field =>
-          `"${String(field).replace(/"/g, '""')}"` // 每個欄位都用雙引號包裹並逸出內部雙引號
+          `"${String(field).replace(/"/g, '""')}"` // Enclose each field in double quotes and escape internal double quotes
         ).join(',')
       ).join('\n');
 
@@ -1168,9 +1226,14 @@
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url); // 釋放 URL 物件資源
+    URL.revokeObjectURL(url); // Release URL object resources
 
     toastMgr.show('CSV 檔案已準備好下載。', 'check_circle', 3000);
+  });
+
+  // Clear Data button click handler
+  ui.clearDataBtn.addEventListener('click', () => {
+    clearEvents(); // Call the clearEvents function
   });
 })();
 </script>
