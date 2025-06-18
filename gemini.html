@@ -453,7 +453,7 @@
 </div>
 <div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
 <footer role="contentinfo">
-  © 2024 Twitch 小奇點與 贈訂擷取器 | 開發者: BLACKBOXAI 版權所有
+  © 2025 Twitch 小奇點與 贈訂擷取器 | mao030
 </footer>
 <script>
 (() => {
@@ -524,9 +524,6 @@
     events: [], // 儲存所有擷取到的事件
     filterType: 'all', // 當前篩選類型 ('all', 'bits', 'gift')
     channel: '', // 當前連接的頻道名稱
-    // userToken: '', // 未使用，因為 IRC 連線不需要 Twitch OAuth User Token
-    // bitsCount: 0, // 這些會在 updateBadges 中即時計算
-    // giftCount: 0,
   };
 
   // UI 元素快取
@@ -571,8 +568,6 @@
   class TwitchIRC {
     constructor(channel, token = '') {
       this.channel = channel.toLowerCase();
-      // Twitch IRC 通常使用匿名的 "justinfan" 用戶名，不需要實際的 OAuth Token 進行聊天室數據擷取。
-      // 'SCHMOOPIIE' 是一個匿名密碼。
       this.token = token;
       this.websocket = null;
       this.listeners = {};
@@ -802,7 +797,22 @@
 
     const username = tags['login'] || '';
     const displayName = tags['display-name'] || username;
-    const combinedName = username && displayName ? `${username}#${displayName}` : (username || displayName || '匿名');
+
+    // 調整名稱格式為 display-name (login-name)
+    // 如果 login-name 和 display-name 相同，則只顯示 display-name
+    // 如果只有 login-name，則顯示 login-name
+    // 如果都沒有，則顯示 '匿名'
+    let combinedNameFormatted;
+    if (displayName && username && displayName !== username) {
+      combinedNameFormatted = `${displayName} (${username})`;
+    } else if (displayName) {
+      combinedNameFormatted = displayName;
+    } else if (username) {
+      combinedNameFormatted = username;
+    } else {
+      combinedNameFormatted = '匿名';
+    }
+
 
     let event = null;
 
@@ -813,7 +823,7 @@
         timestamp,
         username,
         displayName,
-        combinedName,
+        combinedName: combinedNameFormatted, // 使用新的格式化名稱
         type: 'bits',
         amount: bitsAmount,
         message: trailing || '', // 小奇點的聊天訊息
@@ -835,7 +845,7 @@
         timestamp,
         username, // 贈送者的 login 名稱
         displayName, // 贈送者的 display 名稱
-        combinedName,
+        combinedName: combinedNameFormatted, // 使用新的格式化名稱
         type: 'gift',
         amount: amount,
         recipientName: tags['msg-param-recipient-display-name'] || '', // 單次贈送的接收者
@@ -926,9 +936,11 @@
       timeTd.title = ev.timestamp.toISOString(); // hover 時顯示完整 ISO 時間
 
       const nameTd = document.createElement('td');
+      // 直接使用 parseTwitchEvent 處理過的 combinedName 字段
       nameTd.textContent = ev.combinedName;
       nameTd.className = 'user-name';
-      nameTd.title = `Login: ${ev.username || '匿名'} / Display: ${ev.displayName || '匿名'}`;
+      // 提示文字可以更詳細，包含原始的 display name 和 login name
+      nameTd.title = `顯示名稱: ${ev.displayName || '匿名'} / 登入名稱: ${ev.username || '匿名'}`;
 
       const typeTd = document.createElement('td');
       const typeInfo = getEventIconAndText(ev.type);
@@ -959,7 +971,9 @@
       if (ev.amount > 1) {
         return `觀眾 ${ev.combinedName} 贈送了 ${ev.amount} 個訂閱 (${ev.tier})！`;
       } else {
-        return `觀眾 ${ev.combinedName} 贈送了一個訂閱 (${ev.tier}) 給 ${ev.recipientName || '未知'}！`;
+        // 對於單一贈訂，RecipientName 在 EventSub V1 缺乏，但 IRC 可能提供
+        // 這裡確保即使沒有 recipientName 也顯示匿名或未知
+        return `觀眾 ${ev.combinedName} 贈送了一個訂閱 (${ev.tier})${ev.recipientName ? ` 給 ${ev.recipientName}` : ''}！`;
       }
     }
     return '';
@@ -1004,17 +1018,23 @@
       }
     });
 
-    state.socket.on('close', () => {
+    state.socket.on('close', (event) => { // 接收 event 參數
       state.connected = false;
       ui.connectBtn.textContent = '連線 Twitch IRC';
       ui.connectBtn.disabled = false; // 斷開後重新啟用連線按鈕
-      toastMgr.show('連線已斷開', 'warning', 3000);
+      // 根據關閉事件的 clean 屬性提供更具體的訊息
+      if (event && event.wasClean) {
+        toastMgr.show('連線已斷開', 'info', 3000);
+      } else {
+        toastMgr.show('連線意外斷開，正在嘗試重連...', 'warning', 5000);
+      }
     });
 
     state.socket.on('error', e => {
+      // 錯誤發生時，通常會緊接著觸發 close 事件，由 close 處理重連
+      // 這裡僅用於日誌和單獨的錯誤提示，避免重複的重連訊息
       toastMgr.show('連線錯誤，請檢查頻道名稱或網路連線。', 'error', 6000);
       console.error('WebSocket 錯誤:', e);
-      // 錯誤發生時，通常會緊接著觸發 close 事件，由 close 處理重連
     });
 
     ui.connectBtn.disabled = true; // 連線中禁用按鈕
@@ -1027,10 +1047,6 @@
   function disconnectIRC() {
     if (state.socket) {
       state.socket.disconnect(); // 觸發 onClose 事件，並在其中處理清理
-      // state.socket = null; // 在 onClose 中處理
-      // state.connected = false; // 在 onClose 中處理
-      ui.connectBtn.textContent = '連線 Twitch IRC';
-      // ui.connectBtn.disabled = false; // 在 onClose 中處理
       toastMgr.show('已手動斷開連線', 'info', 3000);
     }
   }
@@ -1104,7 +1120,6 @@
   });
 
   // 應用程式啟動時的初始化
-  // 移除 initTheme() 因為其功能可能已集成到 CSS 或其他地方，且未在此程式碼中定義
   updateBadges(); // 首次載入時更新徽章
   renderTable(state.filterType); // 首次載入時渲染空表格
 
@@ -1135,7 +1150,7 @@
     const headers = ['時間', '名稱', '類型', '數量'];
     const rows = state.events.map(ev => [
       formatDateTime(ev.timestamp),
-      ev.combinedName,
+      ev.combinedName, // 使用新的格式化名稱
       getEventIconAndText(ev.type).text, // 使用輔助函數獲取類型文字
       ev.type === 'gift' ? `${ev.amount} (${ev.tier})` : ev.amount.toString() // 贈送訂閱顯示 tier
     ]);
