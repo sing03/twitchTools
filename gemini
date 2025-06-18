@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Twitch 小奇點 &amp; 贈訂 資訊擷取器</title>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+<style>
+  :root {
+    --color-primary-dark: #00314F;
+    --color-primary-mid: #3E6B8E;
+    --color-primary-light: #FCE4A8; /* Warm yellow/orange for accents and text */
+    --color-text-light: var(--color-primary-light);
+    --color-background-header: var(--color-primary-dark);
+    --color-shadow-dark: rgba(0, 19, 79, 0.7);
+    --spacing-sm: 12px;
+    --spacing-md: 24px;
+    --border-radius-lg: 12px;
+    --table-header-bg: var(--color-primary-dark);
+    --table-row-bg: var(--color-primary-mid);
+    --table-row-hover-bg: #274a71; /* Slightly darker mid for hover */
+    --sidebar-bg: var(--color-primary-dark);
+    --sidebar-item-bg: var(--color-primary-dark);
+    --sidebar-item-hover-bg: var(--color-primary-light); /* Hover background is the light accent */
+    --sidebar-item-hover-color: var(--color-primary-dark); /* Hover text is the dark primary */
+  }
+
+  /* Reset & base */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-family: 'Inter', 'Noto Sans TC', sans-serif;
+    background: var(--color-primary-dark);
+    color: var(--color-text-light);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-primary-dark);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-primary-mid);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--table-row-hover-bg);
+  }
+  /* Header */
+  header {
+    position: sticky;
+    top: 0;
+    height: 64px;
+    background: var(--color-background-header);
+    box-shadow: 0 2px var(--spacing-sm) var(--color-shadow-dark);
+    display: flex;
+    align-items: center;
+    padding: 0 var(--spacing-md);
+    z-index: 101;
+    gap: var(--spacing-sm);
+  }
+  header .menu-button {
+    background: transparent;
+    border: none;
+    color: var(--color-primary-light);
+    cursor: pointer;
+    font-size: 28px;
+    padding: 6px 8px 6px 0;
+    border-radius: var(--border-radius-lg);
+    transition: background-color 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+  header .menu-button:hover,
+  header .menu-button:focus {
+    background: rgba(252, 228, 168, 0.15); /* Light accent with transparency */
+    outline: none;
+  }
+  header .menu-button .material-icons {
+    font-size: 28px;
+  }
+  header .brand {
+    font-weight: 900;
+    font-size: clamp(1.25rem, 1.5vw, 1.75rem);
+    letter-spacing: 0.08em;
+    color: var(--color-primary-light);
+    user-select: none;
+  }
+
+  /* Layout */
+  #app {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: calc(100vh - 64px);
+    overflow: hidden;
+  }
+  /* Sidebar */
+  nav.sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: var(--sidebar-bg); /* Use CSS variable */
+    display: flex;
+    flex-direction: column;
+    padding-top: 20px;
+    color: var(--color-primary-light);
+    transition: transform 0.3s ease;
+    border-right: 1px solid var(--color-primary-light); /* Use CSS variable */
+    z-index: 200;
+  }
+  nav.sidebar h2 {
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 32px;
+    letter-spacing: 0.08em;
+    user-select: none;
+    color: var(--color-primary-light);
+  }
+  nav.sidebar ul {
+    list-style: none;
+    padding: 0 12px;
+    margin: 0;
+    flex: 1;
+    overflow-y: auto;
+    /* Removed background here, as it's defined on the parent nav.sidebar */
+  }
+  nav.sidebar ul li {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    border-radius: var(--border-radius-lg);
+    cursor: pointer;
+    gap: 16px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--color-primary-light);
+    user-select: none;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    background: var(--sidebar-item-bg); /* Use CSS variable */
+  }
+  nav.sidebar ul li:hover,
+  nav.sidebar ul li.active {
+    background: var(--sidebar-item-hover-bg); /* Use CSS variable */
+    color: var(--sidebar-item-hover-color); /* Use CSS variable */
+  }
+  /* Removed .material-icons style for sidebar li as icons are removed from HTML structure */
+  nav.sidebar ul li .badge {
+    background: var(--color-primary-mid); /* Adjust badge color for new theme */
+    border-radius: 16px;
+    padding: 2px 10px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    color: var(--color-primary-light); /* Badge text color */
+    user-select: none;
+    margin-left: auto; /* Push badge to the right */
+    display: none; /* Controlled by JS */
+  }
+  /* Mobile Sidebar Hidden */
+  nav.sidebar.mobile-hidden {
+    transform: translateX(-100%);
+    position: fixed;
+    top: 64px;
+    bottom: 0;
+    left: 0;
+    width: 280px;
+    box-shadow: 4px 0 12px var(--color-shadow-dark);
+  }
+
+  /* Main Content */
+  main.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: var(--spacing-md);
+    overflow-y: auto;
+  }
+  #subTitle {
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: var(--color-primary-light);
+    margin-bottom: var(--spacing-md);
+    user-select: none;
+    transition: color 0.3s ease;
+  }
+  main.content .input-group {
+    max-width: 480px;
+    margin-bottom: var(--spacing-md);
+  }
+  main.content label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: var(--color-primary-light);
+  }
+  main.content input[type="text"] {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: var(--border-radius-lg);
+    border: none;
+    font-size: 1rem;
+    background: var(--table-row-bg); /* Use table row bg for input */
+    color: var(--color-primary-light);
+    transition: background-color 0.3s ease;
+  }
+  main.content input[type="text"]:focus {
+    background: var(--table-row-hover-bg); /* Use table row hover bg for input focus */
+    outline: none;
+  }
+  main.content button.connect-btn,
+  main.content button.export-btn {
+    margin-top: 12px;
+    background: var(--color-primary-dark);
+    border: 2px solid var(--color-primary-light);
+    color: var(--color-primary-light);
+    font-weight: 700;
+    cursor: pointer;
+    padding: 12px 28px;
+    font-size: 1rem;
+    border-radius: 14px;
+    box-shadow: 0 0 5px var(--color-primary-light);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease; /* Added color transition */
+    user-select: none;
+  }
+  main.content button.connect-btn:hover:enabled,
+  main.content button.export-btn:hover:enabled {
+    background: var(--color-primary-light);
+    color: var(--color-primary-dark); /* Text changes to dark primary on hover */
+    box-shadow: 0 0 15px var(--color-primary-light);
+  }
+  main.content button.connect-btn:disabled,
+  main.content button.export-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .btn-group {
+    margin-bottom: 16px;
+    display: flex;
+    gap: 16px;
+  }
+  /* Data table */
+  table.event-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 12px;
+    font-size: 0.95rem;
+    color: var(--color-primary-light);
+  }
+  table.event-table thead th {
+    text-align: left;
+    font-weight: 700;
+    padding: 12px 16px;
+    background: var(--table-header-bg);
+    user-select: none;
+    /* Added border-radius to match row style */
+    border-top-left-radius: var(--border-radius-lg);
+    border-top-right-radius: var(--border-radius-lg);
+  }
+  table.event-table tbody tr {
+    background: var(--table-row-bg);
+    border-radius: var(--border-radius-lg);
+    transition: background-color 0.3s ease;
+  }
+  table.event-table tbody tr:hover {
+    background: var(--table-row-hover-bg);
+  }
+  table.event-table tbody td {
+    padding: 12px 16px;
+    /* Removed transparent border-top, relying on border-spacing for visual separation */
+    vertical-align: middle;
+    /* Applying border-radius to first and last cell of row */
+    border-bottom-left-radius: var(--border-radius-lg); /* Only first cell */
+    border-top-left-radius: var(--border-radius-lg); /* Only first cell */
+    border-bottom-right-radius: var(--border-radius-lg); /* Only last cell */
+    border-top-right-radius: var(--border-radius-lg); /* Only last cell */
+  }
+  /* Adjustments for rounded corners on first/last cells */
+  table.event-table tbody tr td:first-child {
+    border-top-left-radius: var(--border-radius-lg);
+    border-bottom-left-radius: var(--border-radius-lg);
+  }
+  table.event-table tbody tr td:last-child {
+    border-top-right-radius: var(--border-radius-lg);
+    border-bottom-right-radius: var(--border-radius-lg);
+  }
+
+  table.event-table tbody td > .user-name {
+    font-weight: 600;
+    max-width: 380px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  table.event-table tbody td .material-icons {
+    vertical-align: middle;
+    font-size: 20px;
+    margin-right: 4px;
+    color: var(--color-primary-light);
+  }
+  /* Scroll container for table */
+  .table-wrapper {
+    overflow-x: auto;
+    padding-bottom: 12px;
+  }
+
+  /* Toast Notifications */
+  #toast-container {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    max-width: 320px;
+    z-index: 9999;
+  }
+  .toast {
+    background: var(--color-primary-dark);
+    padding: 14px 20px;
+    border-radius: var(--border-radius-lg);
+    margin-top: 10px;
+    color: var(--color-primary-light);
+    box-shadow: 0 4px 20px rgba(62, 107, 142, 0.7); /* Use primary-mid for shadow */
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    opacity: 0;
+    transform: translateX(100%);
+    animation: slideInToast 0.3s forwards;
+    font-weight: 600;
+  }
+  .toast-icon {
+    font-size: 24px;
+    color: var(--color-primary-light);
+    flex-shrink: 0;
+  }
+  @keyframes slideInToast {
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  /* Footer */
+  footer {
+    background: var(--color-primary-dark);
+    color: var(--color-primary-light);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 12px 16px;
+    user-select: none;
+  }
+  /* Responsive */
+  @media (max-width: 1023px) {
+    nav.sidebar {
+      position: fixed;
+      top: 64px;
+      left: 0;
+      bottom: 0;
+      transform: translateX(-100%);
+      width: 280px;
+      z-index: 20;
+      box-shadow: 4px 0 12px var(--color-shadow-dark);
+    }
+    nav.sidebar.mobile-visible {
+      transform: translateX(0);
+      transition: transform 0.3s ease;
+    }
+    #app {
+      padding-left: 0;
+    }
+  }
+  @media (max-width: 639px) {
+    header {
+      padding: 0 16px;
+    }
+    main.content {
+      padding: 16px 20px;
+    }
+    table.event-table {
+      font-size: 0.8rem;
+    }
+    table.event-table thead th,
+    table.event-table tbody td {
+      padding: 8px 10px;
+    }
+    nav.sidebar ul li {
+      padding: 9px 12px;
+      font-size: 0.9rem;
+    }
+  }
+</style>
+</head>
+<body>
+<header role="banner" aria-label="主選單區">
+  <button id="menu-toggle" class="menu-button" aria-label="切換選單" title="切換選單" aria-expanded="false" aria-controls="sidebar">
+    <span class="material-icons">menu</span>
+  </button>
+  <div class="brand" tabindex="0" id="mainTitle">Twitch Bits 與 贈訂擷取</div>
+</header>
+<div id="app">
+  <nav class="sidebar" id="sidebar" aria-label="主要導航">
+    <h2 tabindex="0">事件分類</h2>
+    <ul>
+      <li class="active" data-type="all" tabindex="0" role="button" aria-pressed="true" aria-label="顯示全部事件">
+        <span class="material-icons">view_stream</span>全部事件<span class="badge" id="badge-all"></span>
+      </li>
+      <li data-type="bits" tabindex="0" role="button" aria-pressed="false" aria-label="顯示小奇點">
+        <span class="material-icons">local_play</span>小奇點 (Bits)<span class="badge" id="badge-bits"></span>
+      </li>
+      <li data-type="gift" tabindex="0" role="button" aria-pressed="false" aria-label="顯示贈送訂閱">
+        <span class="material-icons">card_giftcard</span>贈送訂閱<span class="badge" id="badge-gift"></span>
+      </li>
+    </ul>
+  </nav>
+  <main class="content" role="main">
+    <p id="subTitle" aria-live="polite" aria-atomic="true" style="margin-top:0; margin-bottom:24px;">全部事件</p>
+    <section aria-label="頻道設定區" class="input-group">
+      <label for="channelName">輸入要觀察的 Twitch 頻道ID：</label>
+      <input type="text" id="channelName" placeholder="例如：ninja" aria-describedby="channelHelp" autocomplete="off" />
+      <button class="connect-btn" id="connectBtn" disabled>連線 Twitch IRC</button>
+      <small id="channelHelp">輸入正確的頻道ID以擷取聊天室事件。</small>
+    </section>
+    <section aria-label="匯出功能" class="btn-group" style="user-select:none;">
+      <button class="export-btn" id="exportCsvBtn" aria-label="下載 CSV 檔案">下載 CSV 檔案</button>
+    </section>
+    <section aria-label="事件列表" class="table-wrapper" tabindex="0">
+      <table class="event-table" role="grid" aria-live="polite" aria-relevant="all">
+        <thead>
+          <tr>
+            <th scope="col" style="width: 160px;">時間</th>
+            <th scope="col" style="width: 380px;">名稱</th>
+            <th scope="col" style="width: 300px;">類型</th>
+            <th scope="col" style="width: 160px;">數量</th>
+          </tr>
+        </thead>
+        <tbody id="eventTableBody">
+          <!-- 動態項目 -->
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>
+<div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
+<footer role="contentinfo">
+  © 2024 Twitch 小奇點與 贈訂擷取器 | 開發者: BLACKBOXAI 版權所有
+</footer>
+<script>
+(() => {
+  'use strict';
+
+  /**
+   * 格式化日期時間為本地化字串。
+   * @param {Date} date - 要格式化的 Date 物件。
+   * @returns {string} 格式化後的日期時間字串。
+   */
+  function formatDateTime(date) {
+    return date.toLocaleString(undefined, {
+      hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  }
+
+  /**
+   * 管理並顯示Toast通知的類別。
+   */
+  class ToastManager {
+    constructor(container) {
+      if (!container) {
+        console.error("ToastManager: Container element not found.");
+        return;
+      }
+      this.container = container;
+      this.toasts = [];
+    }
+
+    /**
+     * 顯示一個Toast通知。
+     * @param {string} message - 通知訊息。
+     * @param {string} [icon='info'] - Material Icons 的圖標名稱。
+     * @param {number} [duration=4000] - 通知顯示的毫秒數。
+     */
+    show(message, icon = 'info', duration = 4000) {
+      if (!this.container) return; // Safely exit if container is null
+
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.setAttribute('role', 'alert');
+      toast.setAttribute('aria-live', 'assertive');
+      toast.setAttribute('aria-atomic', 'true');
+      toast.innerHTML = `<span class="material-icons toast-icon">${icon}</span><span>${message}</span>`;
+      this.container.appendChild(toast);
+      this.toasts.push(toast);
+
+      // Fade out and remove after duration
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+          if (this.container.contains(toast)) {
+            this.container.removeChild(toast);
+          }
+          this.toasts = this.toasts.filter(t => t !== toast);
+        }, 300); // Match CSS transition duration
+      }, duration);
+    }
+  }
+
+  // 應用程式狀態管理
+  const state = {
+    socket: null,
+    connected: false,
+    events: [], // 儲存所有擷取到的事件
+    filterType: 'all', // 當前篩選類型 ('all', 'bits', 'gift')
+    channel: '', // 當前連接的頻道名稱
+    // userToken: '', // 未使用，因為 IRC 連線不需要 Twitch OAuth User Token
+    // bitsCount: 0, // 這些會在 updateBadges 中即時計算
+    // giftCount: 0,
+  };
+
+  // UI 元素快取
+  const ui = {
+    channelInput: document.getElementById('channelName'),
+    connectBtn: document.getElementById('connectBtn'),
+    eventTableBody: document.getElementById('eventTableBody'),
+    sidebar: document.getElementById('sidebar'),
+    menuToggle: document.getElementById('menu-toggle'),
+    badges: {
+      all: document.getElementById('badge-all'),
+      bits: document.getElementById('badge-bits'),
+      gift: document.getElementById('badge-gift')
+    },
+    exportCsvBtn: document.getElementById('exportCsvBtn'),
+    subTitle: document.getElementById('subTitle'),
+    sidebarItems: document.querySelectorAll('nav.sidebar ul li')
+  };
+
+  // 初始化 Toast 管理器
+  const toastMgr = new ToastManager(document.getElementById('toast-container'));
+
+  /**
+   * 驗證 Twitch 頻道名稱格式。
+   * @param {string} name - 頻道名稱。
+   * @returns {boolean} 如果名稱有效則為 true。
+   */
+  function validateChannelName(name) {
+    if (typeof name !== 'string') return false;
+    // Twitch 頻道名稱通常為 4-25 個小寫字母、數字或底線。
+    return /^[a-z0-9_]{4,25}$/.test(name.trim().toLowerCase());
+  }
+
+  // 頻道輸入欄位監聽器：啟用/禁用連線按鈕
+  ui.channelInput.addEventListener('input', () => {
+    ui.connectBtn.disabled = !validateChannelName(ui.channelInput.value);
+  });
+
+  /**
+   * Twitch IRC 客戶端類別。
+   */
+  class TwitchIRC {
+    constructor(channel, token = '') {
+      this.channel = channel.toLowerCase();
+      // Twitch IRC 通常使用匿名的 "justinfan" 用戶名，不需要實際的 OAuth Token 進行聊天室數據擷取。
+      // 'SCHMOOPIIE' 是一個匿名密碼。
+      this.token = token;
+      this.websocket = null;
+      this.listeners = {};
+      this.reconnectInterval = 5000; // 5 秒重連
+      this.connected = false;
+      this.nick = 'justinfan' + Math.floor(Math.random() * 80000); // 匿名用戶名
+      this._reconnectTimer = null;
+    }
+
+    /**
+     * 建立 WebSocket 連線。
+     */
+    connect() {
+      if (this.connected) return;
+      // 清除可能存在的重連計時器
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+
+      const wsUrl = 'wss://irc-ws.chat.twitch.tv:443';
+      this.websocket = new WebSocket(wsUrl);
+      this.websocket.addEventListener('open', () => this.onOpen());
+      this.websocket.addEventListener('message', e => this.onMessage(e));
+      this.websocket.addEventListener('close', e => this.onClose(e));
+      this.websocket.addEventListener('error', e => this.onError(e));
+    }
+
+    /**
+     * 斷開 WebSocket 連線。
+     */
+    disconnect() {
+      if (!this.connected) return;
+      this.websocket.close(1000, 'Client disconnect');
+      this.connected = false;
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+    }
+
+    /**
+     * WebSocket 開啟時的處理函數。
+     */
+    onOpen() {
+      this.connected = true;
+      const nick = this.nick;
+      this.sendRaw(`PASS ${this.token || 'SCHMOOPIIE'}`);
+      this.sendRaw(`NICK ${nick}`);
+      // 請求 Twitch 特定的能力，以獲取標籤、命令和會員信息
+      this.sendRaw('CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership');
+      this.sendRaw(`JOIN #${this.channel}`);
+      this.emit('open');
+    }
+
+    /**
+     * 接收到 WebSocket 訊息時的處理函數。
+     * @param {MessageEvent} event - WebSocket 訊息事件。
+     */
+    onMessage(event) {
+      const msg = event.data;
+      if (msg.startsWith('PING')) {
+        this.sendRaw('PONG :tmi.twitch.tv'); // 回應 PING 以保持連線
+        return;
+      }
+      // Twitch IRC 訊息可能包含多條訊息，需要分割處理
+      msg.split('\r\n').forEach(line => {
+        if (line) {
+          const parsed = this.parseIRCMessage(line);
+          if (parsed) {
+            this.emit('message', parsed);
+          }
+        }
+      });
+    }
+
+    /**
+     * WebSocket 關閉時的處理函數。
+     * @param {CloseEvent} event - WebSocket 關閉事件。
+     */
+    onClose(event) {
+      this.connected = false;
+      this.emit('close', event);
+      // 如果不是正常關閉，嘗試重連
+      if (!event.wasClean) {
+        console.warn(`WebSocket closed uncleanly. Attempting reconnect in ${this.reconnectInterval / 1000}s.`, event);
+        if (!this._reconnectTimer) {
+          this._reconnectTimer = setTimeout(() => {
+            this._reconnectTimer = null;
+            this.connect(); // 嘗試重連
+          }, this.reconnectInterval);
+        }
+      } else {
+        console.log('WebSocket closed cleanly.', event);
+      }
+    }
+
+    /**
+     * WebSocket 錯誤時的處理函數。
+     * @param {Event} event - WebSocket 錯誤事件。
+     */
+    onError(event) {
+      console.error('WebSocket Error:', event);
+      this.emit('error', event);
+      // 錯誤發生時也會觸發 onClose，因此重連邏輯主要在 onClose 處理
+    }
+
+    /**
+     * 向 WebSocket 發送原始 IRC 命令。
+     * @param {string} cmd - 要發送的 IRC 命令。
+     */
+    sendRaw(cmd) {
+      if (this.connected && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        this.websocket.send(cmd + '\r\n');
+      } else {
+        console.warn('WebSocket not open. Cannot send command:', cmd);
+      }
+    }
+
+    /**
+     * 解析原始 IRC 訊息字串。
+     * 這是 IRC 協定解析的簡化版本，用於從 Twitch 訊息中提取標籤、命令和參數。
+     * @param {string} raw - 原始 IRC 訊息字串。
+     * @returns {Object|null} 解析後的訊息物件或 null。
+     */
+    parseIRCMessage(raw) {
+      const message = {
+        raw,
+        tags: {},
+        prefix: '',
+        command: '',
+        params: [],
+        trailing: '', // 訊息的最後一部分，通常是聊天內容
+      };
+
+      let rest = raw;
+
+      // 解析標籤 (Tags)
+      if (rest.startsWith('@')) {
+        const endTags = rest.indexOf(' ');
+        if (endTags === -1) return null; // 無效格式
+        const tagsStr = rest.slice(1, endTags);
+        rest = rest.slice(endTags + 1);
+        tagsStr.split(';').forEach(tagPair => {
+          const [key, ...vals] = tagPair.split('=');
+          message.tags[key] = vals.join('=') || ''; // 處理值中可能包含 '=' 的情況
+        });
+      }
+
+      // 解析前綴 (Prefix)
+      if (rest.startsWith(':')) {
+        const endPrefix = rest.indexOf(' ');
+        if (endPrefix === -1) return null; // 無效格式
+        message.prefix = rest.slice(1, endPrefix);
+        rest = rest.slice(endPrefix + 1);
+      }
+
+      // 解析命令 (Command) 和參數 (Parameters)
+      const parts = rest.split(' :'); // 將 trailing 訊息與其他部分分離
+      const commandAndParams = parts[0].trim().split(' ');
+
+      message.command = commandAndParams[0];
+      message.params = commandAndParams.slice(1);
+      message.trailing = parts.length > 1 ? parts.slice(1).join(' :') : '';
+
+      return message;
+    }
+
+    /**
+     * 註冊事件監聽器。
+     * @param {string} event - 事件名稱。
+     * @param {Function} cb - 回調函數。
+     */
+    on(event, cb) {
+      if (!this.listeners[event]) {
+        this.listeners[event] = [];
+      }
+      this.listeners[event].push(cb);
+    }
+
+    /**
+     * 移除事件監聽器。
+     * @param {string} event - 事件名稱。
+     * @param {Function} cb - 要移除的回調函數。
+     */
+    off(event, cb) {
+      if (!this.listeners[event]) return;
+      this.listeners[event] = this.listeners[event].filter(fn => fn !== cb);
+    }
+
+    /**
+     * 觸發事件。
+     * @param {string} event - 事件名稱。
+     * @param {*} data - 傳遞給回調函數的數據。
+     */
+    emit(event, data) {
+      if (this.listeners[event]) {
+        this.listeners[event].forEach(cb => cb(data));
+      }
+    }
+  }
+
+  /**
+   * 根據 Event Type 返回 Material Icon 名稱和顯示文字。
+   * @param {string} type - 事件類型 ('all', 'bits', 'gift')。
+   * @returns {{icon: string, text: string}} 包含圖標名稱和顯示文字的物件。
+   */
+  function getEventIconAndText(type) {
+    switch (type) {
+      case 'all': return { icon: 'view_stream', text: '全部事件' };
+      case 'bits': return { icon: 'local_play', text: '小奇點 (Bits)' };
+      case 'gift': return { icon: 'card_giftcard', text: '贈送訂閱' };
+      default: return { icon: 'info', text: type };
+    }
+  }
+
+  /**
+   * 解析來自 Twitch IRC 的原始訊息，提取出小奇點或贈訂事件的結構化數據。
+   * @param {Object} msg - 經過 `parseIRCMessage` 解析後的 IRC 訊息物件。
+   * @returns {Object|null} 結構化的事件物件或 null。
+   */
+  function parseTwitchEvent(msg) {
+    const tags = msg.tags;
+    const command = msg.command;
+    const trailing = msg.trailing;
+    const timestamp = new Date(); // 使用當前時間作為事件時間
+
+    const username = tags['login'] || '';
+    const displayName = tags['display-name'] || username;
+    const combinedName = username && displayName ? `${username}#${displayName}` : (username || displayName || '匿名');
+
+    let event = null;
+
+    // 處理小奇點事件 (PRIVMSG 帶有 bits 標籤)
+    if (command === 'PRIVMSG' && tags.bits && tags.bits !== '0') {
+      const bitsAmount = parseInt(tags.bits, 10);
+      event = {
+        timestamp,
+        username,
+        displayName,
+        combinedName,
+        type: 'bits',
+        amount: bitsAmount,
+        message: trailing || '', // 小奇點的聊天訊息
+        rawTags: tags,
+      };
+    }
+    // 處理贈送訂閱事件 (NOTICE 帶有 subgift 或 submysterygift 標籤)
+    else if (command === 'NOTICE' && (tags['msg-id'] === 'subgift' || tags['msg-id'] === 'submysterygift')) {
+      const tier = tags['msg-param-sub-plan'] || '';
+      const tierMap = {'1000':'Tier 1','2000':'Tier 2','3000':'Tier 3'};
+      const tierName = tierMap[tier] || tier;
+      let amount = 1;
+
+      if (tags['msg-id'] === 'submysterygift') {
+        amount = parseInt(tags['msg-param-mass-gift-count'] || '1', 10);
+      }
+
+      event = {
+        timestamp,
+        username, // 贈送者的 login 名稱
+        displayName, // 贈送者的 display 名稱
+        combinedName,
+        type: 'gift',
+        amount: amount,
+        recipientName: tags['msg-param-recipient-display-name'] || '', // 單次贈送的接收者
+        tier: tierName,
+        message: trailing || '', // 通常是空字串或簡單的通知訊息
+        rawTags: tags,
+      };
+    }
+    return event;
+  }
+
+  /**
+   * 處理並渲染新接收到的事件。
+   * @param {Object} event - 解析後的事件物件。
+   */
+  function renderEvent(event) {
+    if (!event) return;
+
+    // 將新事件添加到列表開頭
+    state.events.unshift(event);
+
+    // 限制事件數量，避免過多數據導致效能問題
+    if (state.events.length > 200) {
+      state.events.pop(); // 移除最舊的事件
+    }
+
+    updateBadges();
+    renderTable(state.filterType);
+
+    // 僅當頁面可見時顯示 Toast
+    if (!document.hidden) {
+      const toastIconText = getEventIconAndText(event.type);
+      toastMgr.show(renderToastMessage(event), toastIconText.icon);
+    }
+  }
+
+  /**
+   * 更新側邊欄徽章的計數。
+   */
+  function updateBadges() {
+    const allCount = state.events.length;
+    const bitsCount = state.events.filter(e => e.type === 'bits').length;
+    const giftCount = state.events.filter(e => e.type === 'gift').length;
+
+    // 更新並顯示徽章
+    if (ui.badges.all) {
+      ui.badges.all.textContent = allCount;
+      ui.badges.all.style.display = allCount > 0 ? 'inline-block' : 'none';
+    }
+    if (ui.badges.bits) {
+      ui.badges.bits.textContent = bitsCount;
+      ui.badges.bits.style.display = bitsCount > 0 ? 'inline-block' : 'none';
+    }
+    if (ui.badges.gift) {
+      ui.badges.gift.textContent = giftCount;
+      ui.badges.gift.style.display = giftCount > 0 ? 'inline-block' : 'none';
+    }
+  }
+
+  /**
+   * 根據當前篩選類型渲染事件表格。
+   * @param {string} [filter='all'] - 篩選類型 ('all', 'bits', 'gift')。
+   */
+  function renderTable(filter = 'all') {
+    ui.eventTableBody.innerHTML = ''; // 清空表格內容
+
+    const filteredEvents = state.events.filter(e => filter === 'all' || e.type === filter);
+
+    if (filteredEvents.length === 0) {
+      const noDataRow = document.createElement('tr');
+      const noDataCell = document.createElement('td');
+      noDataCell.colSpan = 4;
+      noDataCell.style.textAlign = 'center';
+      noDataCell.textContent = '目前沒有事件數據。';
+      noDataRow.appendChild(noDataCell);
+      ui.eventTableBody.appendChild(noDataRow);
+      return;
+    }
+
+    // 使用 DocumentFragment 最佳化 DOM 插入
+    const fragment = document.createDocumentFragment();
+
+    for (const ev of filteredEvents) {
+      const tr = document.createElement('tr');
+
+      const timeTd = document.createElement('td');
+      timeTd.textContent = formatDateTime(ev.timestamp);
+      timeTd.title = ev.timestamp.toISOString(); // hover 時顯示完整 ISO 時間
+
+      const nameTd = document.createElement('td');
+      nameTd.textContent = ev.combinedName;
+      nameTd.className = 'user-name';
+      nameTd.title = `Login: ${ev.username || '匿名'} / Display: ${ev.displayName || '匿名'}`;
+
+      const typeTd = document.createElement('td');
+      const typeInfo = getEventIconAndText(ev.type);
+      typeTd.innerHTML = `<span class="material-icons" aria-hidden="true">${typeInfo.icon}</span>${typeInfo.text}`;
+
+      const amtTd = document.createElement('td');
+      amtTd.textContent = ev.amount.toString();
+      if (ev.type === 'gift') {
+        amtTd.textContent = `${ev.amount} (${ev.tier})`;
+      }
+
+      tr.append(timeTd, nameTd, typeTd, amtTd);
+      fragment.appendChild(tr);
+    }
+    ui.eventTableBody.appendChild(fragment);
+  }
+
+  /**
+   * 根據事件類型生成 Toast 訊息內容。
+   * @param {Object} ev - 事件物件。
+   * @returns {string} 適合顯示在 Toast 中的訊息字串。
+   */
+  function renderToastMessage(ev) {
+    if (!ev) return '';
+    if (ev.type === 'bits') {
+      return `觀眾 ${ev.combinedName} 贊助了 ${ev.amount} 小奇點！`;
+    } else if (ev.type === 'gift') {
+      if (ev.amount > 1) {
+        return `觀眾 ${ev.combinedName} 贈送了 ${ev.amount} 個訂閱 (${ev.tier})！`;
+      } else {
+        return `觀眾 ${ev.combinedName} 贈送了一個訂閱 (${ev.tier}) 給 ${ev.recipientName || '未知'}！`;
+      }
+    }
+    return '';
+  }
+
+  // 連線/中斷連線按鈕點擊處理
+  ui.connectBtn.addEventListener('click', () => {
+    if (state.connected) {
+      disconnectIRC();
+    } else {
+      const channel = ui.channelInput.value.trim().toLowerCase();
+      if (!validateChannelName(channel)) {
+        toastMgr.show('頻道名稱格式錯誤，請輸入有效的頻道名稱。', 'error', 6000);
+        return;
+      }
+      connectIRC(channel);
+    }
+  });
+
+  /**
+   * 連線到 Twitch IRC 聊天室。
+   * @param {string} channel - 要連線的 Twitch 頻道名稱。
+   */
+  function connectIRC(channel) {
+    if (state.connected) return;
+
+    state.channel = channel;
+    state.socket = new TwitchIRC(channel);
+
+    state.socket.on('open', () => {
+      state.connected = true;
+      ui.connectBtn.textContent = '中斷連線';
+      ui.connectBtn.disabled = false; // 連線成功後才啟用中斷連線按鈕
+      toastMgr.show(`已連線至 Twitch 頻道：${channel}`, 'check_circle', 3000);
+      clearEvents(); // 清除舊事件
+    });
+
+    state.socket.on('message', msg => {
+      const event = parseTwitchEvent(msg);
+      if (event) {
+        renderEvent(event);
+      }
+    });
+
+    state.socket.on('close', () => {
+      state.connected = false;
+      ui.connectBtn.textContent = '連線 Twitch IRC';
+      ui.connectBtn.disabled = false; // 斷開後重新啟用連線按鈕
+      toastMgr.show('連線已斷開', 'warning', 3000);
+    });
+
+    state.socket.on('error', e => {
+      toastMgr.show('連線錯誤，請檢查頻道名稱或網路連線。', 'error', 6000);
+      console.error('WebSocket 錯誤:', e);
+      // 錯誤發生時，通常會緊接著觸發 close 事件，由 close 處理重連
+    });
+
+    ui.connectBtn.disabled = true; // 連線中禁用按鈕
+    state.socket.connect();
+  }
+
+  /**
+   * 斷開 Twitch IRC 連線。
+   */
+  function disconnectIRC() {
+    if (state.socket) {
+      state.socket.disconnect(); // 觸發 onClose 事件，並在其中處理清理
+      // state.socket = null; // 在 onClose 中處理
+      // state.connected = false; // 在 onClose 中處理
+      ui.connectBtn.textContent = '連線 Twitch IRC';
+      // ui.connectBtn.disabled = false; // 在 onClose 中處理
+      toastMgr.show('已手動斷開連線', 'info', 3000);
+    }
+  }
+
+  /**
+   * 清除所有儲存的事件並重新渲染表格和徽章。
+   */
+  function clearEvents() {
+    state.events = [];
+    updateBadges();
+    renderTable(state.filterType);
+  }
+
+  // 側邊欄項目點擊事件處理
+  ui.sidebarItems.forEach(li => {
+    li.addEventListener('click', () => {
+      const type = li.dataset.type;
+      changeFilter(type);
+      setActiveSidebarItem(li);
+
+      // 更新副標題文字 (不包含圖標和徽章文字)
+      if (ui.subTitle) {
+        const typeInfo = getEventIconAndText(type);
+        ui.subTitle.textContent = typeInfo.text;
+      }
+    });
+
+    // 側邊欄項目的鍵盤導航 (Enter/Space)
+    li.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault(); // 防止滾動頁面
+        li.click();
+      }
+    });
+  });
+
+  /**
+   * 更改事件篩選類型並重新渲染表格。
+   * @param {string} type - 新的篩選類型 ('all', 'bits', 'gift')。
+   */
+  function changeFilter(type) {
+    state.filterType = type;
+    renderTable(type);
+  }
+
+  /**
+   * 設定當前活躍的側邊欄項目樣式。
+   * @param {HTMLElement} activeLi - 當前被點擊或選中的側邊欄 `<li>` 元素。
+   */
+  function setActiveSidebarItem(activeLi) {
+    ui.sidebarItems.forEach(li => {
+      li.classList.remove('active');
+      li.setAttribute('aria-pressed', 'false');
+    });
+    if (activeLi) {
+      activeLi.classList.add('active');
+      activeLi.setAttribute('aria-pressed', 'true');
+    }
+  }
+
+  // 菜單切換按鈕 (手機版側邊欄開關)
+  ui.menuToggle.addEventListener('click', () => {
+    const isOpen = ui.sidebar.classList.contains('mobile-visible');
+    if (isOpen) {
+      ui.sidebar.classList.remove('mobile-visible');
+      ui.menuToggle.setAttribute('aria-expanded', 'false');
+    } else {
+      ui.sidebar.classList.add('mobile-visible');
+      ui.menuToggle.setAttribute('aria-expanded', 'true');
+    }
+  });
+
+  // 應用程式啟動時的初始化
+  // 移除 initTheme() 因為其功能可能已集成到 CSS 或其他地方，且未在此程式碼中定義
+  updateBadges(); // 首次載入時更新徽章
+  renderTable(state.filterType); // 首次載入時渲染空表格
+
+  // 全域鍵盤事件監聽器：按下空白鍵切換連線狀態 (除非在輸入框中)
+  window.addEventListener('keydown', e => {
+    if (e.key === ' ' && document.activeElement !== ui.channelInput) {
+      e.preventDefault(); // 防止滾動頁面
+      ui.connectBtn.click();
+    }
+  });
+
+  // 輔助功能：處理首次 Tab 鍵按下，為鍵盤導航添加可視焦點
+  function handleFirstTab(e) {
+    if (e.key === 'Tab') {
+      document.body.classList.add('user-is-tabbing');
+      window.removeEventListener('keydown', handleFirstTab);
+    }
+  }
+  window.addEventListener('keydown', handleFirstTab);
+
+  // 匯出 CSV 按鈕點擊處理
+  ui.exportCsvBtn.addEventListener('click', () => {
+    if (state.events.length === 0) {
+      toastMgr.show('沒有可匯出的事件資料。', 'warning', 3000);
+      return;
+    }
+
+    const headers = ['時間', '名稱', '類型', '數量'];
+    const rows = state.events.map(ev => [
+      formatDateTime(ev.timestamp),
+      ev.combinedName,
+      getEventIconAndText(ev.type).text, // 使用輔助函數獲取類型文字
+      ev.type === 'gift' ? `${ev.amount} (${ev.tier})` : ev.amount.toString() // 贈送訂閱顯示 tier
+    ]);
+
+    // 生成 CSV 內容
+    const csvContent =
+      headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(',') + '\n' + // 確保標題也正確 CSV 格式化
+      rows.map(r =>
+        r.map(field =>
+          `"${String(field).replace(/"/g, '""')}"` // 每個欄位都用雙引號包裹並逸出內部雙引號
+        ).join(',')
+      ).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const timestamp = new Date().toISOString().replace(/[-:.]/g, '').slice(0,15);
+    link.download = `twitch_bits_gifts_${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url); // 釋放 URL 物件資源
+
+    toastMgr.show('CSV 檔案已準備好下載。', 'check_circle', 3000);
+  });
+})();
+</script>
+</body>
+</html>
