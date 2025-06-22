@@ -450,7 +450,7 @@
 </div>
 <div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
 <footer role="contentinfo">
-  © 2024 Twitch 小奇點與 贈訂擷取器 | 開發者: BLACKBOXAI 版權所有
+  © 2025 Twitch 小奇點與 贈訂擷取器 | mao030
 </footer>
 <script>
 (() => {
@@ -674,7 +674,6 @@
      */
     onMessage(event) {
       const msg = event.data;
-      console.log('Received raw IRC message:', msg); // Added for debugging
       if (msg.startsWith('PING')) {
         this.sendRaw('PONG :tmi.twitch.tv'); // Respond to PING to keep connection alive
         return;
@@ -898,10 +897,6 @@
         message: trailing || '', // Usually empty string or simple notification message
         rawTags: tags,
       };
-    } else if (command === 'NOTICE') {
-      // Log other NOTICE messages to help debug if gift notices are different
-      console.log('Received NOTICE command but not a recognized gift event:', msg.raw); // Log the raw message
-      console.log('NOTICE tags:', tags);
     }
     return event;
   }
