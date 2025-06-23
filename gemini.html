@@ -450,7 +450,7 @@
 </div>
 <div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
 <footer role="contentinfo">
-  © 2025 Twitch 小奇點與 贈訂擷取器 | mao030
+  © 2025 Twitch 小奇點與贈訂擷取器 | mao030
 </footer>
 <script>
 (() => {
@@ -674,6 +674,8 @@
      */
     onMessage(event) {
       const msg = event.data;
+      // Log all raw IRC messages for debugging purposes
+      console.log('Received raw IRC message:', msg);
       if (msg.startsWith('PING')) {
         this.sendRaw('PONG :tmi.twitch.tv'); // Respond to PING to keep connection alive
         return;
@@ -874,29 +876,61 @@
         rawTags: tags,
       };
     }
-    // Handle Gifted Subscription event (NOTICE with subgift or submysterygift tag)
+    // Handle Gifted Subscription event (NOTICE with subgift or submysterygift tag) - Old/Alternative Notice
     else if (command === 'NOTICE' && (tags['msg-id'] === 'subgift' || tags['msg-id'] === 'submysterygift')) {
-      const tier = tags['msg-param-sub-plan'] || '';
-      const tierMap = {'1000':'Tier 1','2000':'Tier 2','3000':'Tier 3'};
-      const tierName = tierMap[tier] || tier;
-      let amount = 1;
+        console.warn('Received NOTICE command for gift. Consider USERNOTICE for better data:', msg.raw);
+        const tier = tags['msg-param-sub-plan'] || '';
+        const tierMap = {'1000':'Tier 1','2000':'Tier 2','3000':'Tier 3'};
+        const tierName = tierMap[tier] || tier;
+        let amount = 1;
 
-      if (tags['msg-id'] === 'submysterygift') {
-        amount = parseInt(tags['msg-param-mass-gift-count'] || '1', 10);
-      }
+        if (tags['msg-id'] === 'submysterygift') {
+            amount = parseInt(tags['msg-param-mass-gift-count'] || '1', 10); // Attempt to get mass gift count from NOTICE too
+        }
 
-      event = {
-        timestamp,
-        username, // Gifter's login name
-        displayName, // Gifter's display name
-        combinedName: combinedNameFormatted, // Use the new formatted name
-        type: 'gift',
-        amount: amount,
-        recipientName: tags['msg-param-recipient-display-name'] || '', // Recipient of single gift
-        tier: tierName,
-        message: trailing || '', // Usually empty string or simple notification message
-        rawTags: tags,
-      };
+        event = {
+            timestamp,
+            username, // Gifter's login name (from NOTICE, might be empty if it's channel notice)
+            displayName, // Gifter's display name
+            combinedName: combinedNameFormatted,
+            type: 'gift',
+            amount: amount,
+            recipientName: tags['msg-param-recipient-display-name'] || '',
+            tier: tierName,
+            message: trailing || '',
+            rawTags: tags,
+        };
+    }
+    // Handle Gifted Subscription (USERNOTICE with submysterygift tag) - Recommended for mass gifts
+    else if (command === 'USERNOTICE' && tags['msg-id'] === 'submysterygift') {
+        // Log the raw login and display name for debugging this specific issue
+        console.log(`DEBUG: Detected USERNOTICE submysterygift. Raw login: ${tags['login']}, Display name: ${tags['display-name']}`);
+
+        const tier = tags['msg-param-sub-plan'] || ''; // e.g., "1000", "2000", "3000"
+        const tierMap = {'1000':'Tier 1','2000':'Tier 2','3000':'Tier 3'};
+        const tierName = tierMap[tier] || tier;
+        const totalGiftCount = parseInt(tags['msg-param-mass-gift-count'] || '1', 10); // Total gifts in this batch
+        const senderCount = parseInt(tags['msg-param-sender-count'] || '0', 10); // Total gifts sent by this user
+        // For USERNOTICE submysterygift, the "username" and "displayName" are for the gifter
+        event = {
+            timestamp,
+            username, // Gifter's login name
+            displayName, // Gifter's display name
+            combinedName: combinedNameFormatted,
+            type: 'gift',
+            amount: totalGiftCount, // Use total gifts for the event record
+            // Recipient name is typically not in mass gifts, as it's random
+            recipientName: '',
+            tier: tierName,
+            message: trailing || '', // Chat message (if any) by the gifter
+            rawTags: tags,
+            senderTotalGifts: senderCount // Optional: additional info for tracking gifter's total
+        };
+    }
+    else if (command === 'PRIVMSG' || command === 'USERNOTICE' || command === 'NOTICE') {
+      // Log other PRIVMSG, USERNOTICE, or NOTICE messages that are not recognized as events
+      console.log(`DEBUG: Received ${command} command but not a recognized cheer or gift event. Raw message: ${msg.raw}`);
+      console.log(`DEBUG: ${command} tags:`, tags);
     }
     return event;
   }
@@ -910,11 +944,6 @@
 
     // Add new event to the beginning of the list
     state.events.unshift(event);
-
-    // Removed the 200-item limit, allowing data to accumulate until sessionStorage is full
-    // if (state.events.length > 200) {
-    //   state.events.pop(); // Remove the oldest event
-    // }
 
     saveEventsToSessionStorage(); // Save to sessionStorage
 
